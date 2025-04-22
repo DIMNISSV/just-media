@@ -34,7 +34,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-pf^+6+sx+e--h^m8(e-92
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 't'}
 
-ALLOWED_HOSTS = ['online.hdall.ru']
+ALLOWED_HOSTS = ['online.hdall.ru', '127.0.0.1']
 
 # Application definition
 
@@ -166,7 +166,7 @@ LANGUAGE_CODE = 'en'
 
 LANGUAGES = [
     ("en", _("English")),
-    # Add additional languages here
+    ("ru", _("Russian")),
 ]
 
 TIME_ZONE = 'UTC'
