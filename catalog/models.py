@@ -205,3 +205,36 @@ class MediaSourceLink(models.Model):
     def __str__(self):
         target = self.episode if self.episode else self.media_item
         return f"Link from {self.source.name} for {target}"
+
+
+class MediaItemSourceMetadata(models.Model):
+    """ Stores metadata about a MediaItem from a specific Source """
+    media_item = models.ForeignKey(
+        MediaItem,
+        on_delete=models.CASCADE,
+        related_name='source_metadata',
+        verbose_name=_("Media Item")
+    )
+    source = models.ForeignKey(
+        Source,
+        on_delete=models.CASCADE,
+        related_name='media_metadata',
+        verbose_name=_("Source")
+    )
+    source_last_updated_at = models.DateTimeField(
+        _("Source Last Updated At"),
+        blank=True, null=True, db_index=True,
+        help_text=_("Timestamp of the last update received from this source for this item")
+    )
+
+    class Meta:
+        verbose_name = _("Media Item Source Metadata")
+        verbose_name_plural = _("Media Item Source Metadata")
+        # Ensure only one metadata record per media_item/source combination
+        unique_together = ('media_item', 'source')
+        ordering = ['media_item', 'source']
+
+    def __str__(self):
+        updated_str = self.source_last_updated_at.strftime(
+            '%Y-%m-%d %H:%M:%S') if self.source_last_updated_at else 'Never'
+        return f"Metadata for '{self.media_item}' from '{self.source.name}' (Source Updated: {updated_str})"
