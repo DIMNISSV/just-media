@@ -229,15 +229,6 @@ class Command(BaseCommand):
                         logger.debug(f"Skipping season with None number for MediaItem {media_item.id}")
                         continue
 
-                    # --- FIXED: Check for negative season number ---
-                    if season_number < 0:
-                        logger.warning(
-                            f"Skipping invalid season number {season_number} "
-                            f"received from API for MediaItem {media_item.id} ('{media_item.title}')"
-                        )
-                        continue
-                    # --- END FIX ---
-
                     season, season_created = Season.objects.get_or_create(
                         media_item=media_item, season_number=season_number
                     )
