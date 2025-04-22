@@ -16,23 +16,25 @@ https://docs.django-cms.org/en/release-4.1.x/reference/configuration.html
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.translation import gettext_lazy as _
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-pf^+6+sx+e--h^m8(e-92bbbijr4^+df08_(^yr7g0)q54r0y)'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-pf^+6+sx+e--h^m8(e-92bbbijr4^+df08_(^yr7g0)q54r0y)')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 't'}
 
 ALLOWED_HOSTS = ['online.hdall.ru']
-
 
 # Application definition
 
@@ -46,7 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-     # CMS base apps
+    # CMS base apps
     'cms',
     'menus',
 
@@ -129,7 +131,6 @@ THUMBNAIL_PROCESSORS = (
 
 WSGI_APPLICATION = 'just_media.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -139,7 +140,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -159,7 +159,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -177,7 +176,6 @@ USE_L10N = True
 USE_THOUSAND_SEPARATOR = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
@@ -240,3 +238,13 @@ INTERNAL_IPS = [
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = str(BASE_DIR.parent / "media")
+
+# Kodik settings
+KODIK_API_BASE_URL = "https://kodikapi.com/"
+KODIK_API_TOKEN = os.environ.get('KODIK_API_TOKEN')
+
+if not KODIK_API_TOKEN and DEBUG:
+    print("WARNING: KODIK_API_TOKEN is not set in environment variables!")
+elif not KODIK_API_TOKEN and not DEBUG:
+    # Optional: raise an error if token is missing in production
+    raise ImproperlyConfigured("KODIK_API_TOKEN must be set in environment variables for production.")
