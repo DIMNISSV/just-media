@@ -1,7 +1,7 @@
 # catalog/models.py
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.core.exceptions import ValidationError
 
 
 class Genre(models.Model):
@@ -117,7 +117,7 @@ class MediaItem(models.Model):
 class Season(models.Model):
     media_item = models.ForeignKey(MediaItem, on_delete=models.CASCADE, related_name='seasons',
                                    verbose_name=_("Media Item"))
-    season_number = models.PositiveIntegerField(_("Season Number"))
+    season_number = models.IntegerField(_("Season Number"), db_index=True)
 
     # Add other season-specific info if needed (e.g., title, year)
 
@@ -128,7 +128,14 @@ class Season(models.Model):
         unique_together = ('media_item', 'season_number')  # Ensure one season number per media item
 
     def __str__(self):
-        return f"{self.media_item.title} - Season {self.season_number}"
+        media_title = self.media_item.title if self.media_item else "Unknown Media"
+        if self.season_number == 0:
+            season_str = "Season 0 (OVA/Movie)"  # Or just "OVA/Movie"
+        elif self.season_number == -1:
+            season_str = "Specials"
+        else:
+            season_str = f"Season {self.season_number}"
+        return f"{media_title} - {season_str}"
 
 
 class Episode(models.Model):
