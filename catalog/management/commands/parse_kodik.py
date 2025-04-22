@@ -117,6 +117,7 @@ class Command(BaseCommand):
     def _log(self, message, style=None, verbosity=1, ending='\n'):
         """ Helper for logging based on verbosity level. """
         if self.verbosity >= verbosity:
+            # Always use specified ending for verbosity >= 1
             styled_message = style(message) if style else message
             self.stdout.write(styled_message, ending=ending)
 
@@ -178,7 +179,7 @@ class Command(BaseCommand):
                 **lookup_fields
             )
             action = "Created" if created else "Updated"
-            self._log(f"  {action} MediaItem: {media_item.id} ('{media_item.title}')", verbosity=2, ending='\r')
+            self._log(f"  {action} MediaItem: {media_item.id} ('{media_item.title}')", verbosity=2)
 
             # --- Update Genres and Countries (M2M) ---
             genres_to_set = []
@@ -194,7 +195,7 @@ class Command(BaseCommand):
                 countries_to_set.append(country)
             if countries_to_set or country_names == []:
                 media_item.countries.set(countries_to_set)
-            self._log(f"    Updated M2M for {media_item.id}", verbosity=3, ending='\r')
+            self._log(f"    Updated M2M for {media_item.id}", verbosity=3)
 
             # --- Update/Create Main Source Link ---
             if main_link_data and main_link_data.get('player_link'):
@@ -214,7 +215,7 @@ class Command(BaseCommand):
                         defaults=link_defaults, **link_lookup
                     )
                     link_action = "Created" if link_created else "Updated"
-                    self._log(f"    {link_action} Main Link for {media_item.id}", verbosity=3, ending='\r')
+                    self._log(f"    {link_action} Main Link for {media_item.id}", verbosity=3)
                 else:
                     logger.warning(
                         f"Skipping main link for MediaItem {media_item.id} due to missing source_specific_id in mapping.")
@@ -269,22 +270,24 @@ class Command(BaseCommand):
                                 )
                                 ep_link_action = "Created" if ep_link_created else "Updated"
                                 self._log(f"      {ep_link_action} Link for S{season_number}E{episode_number}",
-                                          verbosity=3, ending='\r')
+                                          verbosity=3)
                             else:
                                 logger.warning(
                                     f"Skipping episode link for {episode} due to missing source_specific_id in mapping.")
 
             self._log(f"  Finished processing MediaItem {media_item.id}. {processed_episodes_count} episodes.",
-                      verbosity=2, ending='\r')
+                      verbosity=2)
             return 1  # Indicate one item processed successfully
 
         # --- MODIFIED: Catch all exceptions within item processing ---
         except Exception as e:
             # Log the exception traceback AND the problematic item data
+            logger.error(f"Failed processing item {item_id_str}.")
             logger.exception(
-                f"Error processing item {item_id_str}. Exception: {e}\n"
+                f"Exception details: {e}\n"
                 f"Problematic item data:\n{json.dumps(item_data, indent=2, ensure_ascii=False)}"
             )
+
             # Re-raise the exception if you want the command to fail hard on the first error,
             # or return 0 to continue processing other items on the page.
             # For debugging, continuing might be better.
@@ -293,6 +296,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.verbosity = options['verbosity']
+        self._log(f"Starting Kodik API parsing with verbosity level: {self.verbosity}", self.style.NOTICE)
         self._log("Starting Kodik API parsing...", self.style.NOTICE)
 
         kodik_source = self._get_kodik_source()
