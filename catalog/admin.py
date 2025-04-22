@@ -7,7 +7,12 @@ from .models import (
 # Simple registration for basic models
 admin.site.register(Genre)
 admin.site.register(Country)
-admin.site.register(Source)
+
+
+@admin.register(Source)
+class SourceAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug')
+    search_fields = ('name', 'slug')
 
 
 # Customized admin for MediaItem for better readability
