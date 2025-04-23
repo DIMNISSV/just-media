@@ -1,19 +1,21 @@
 # catalog/management/commands/parse_kodik.py
 
+import json
 import logging
 import time
-import json
 from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+
 from dateutil.parser import isoparse
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction, IntegrityError
-from django.conf import settings
+
 from catalog.models import (
-    MediaItem, Genre, Country, Source, Season, Episode, MediaSourceLink, MediaItemSourceMetadata
+    MediaItem, Genre, Country, Source, Season, Episode, MediaSourceLink,
+    MediaItemSourceMetadata, Screenshot
 )
 from catalog.services.kodik_client import KodikApiClient
 from catalog.services.kodik_mapper import map_kodik_item_to_models
-from typing import Dict, Any, Optional
 
 try:
     from tqdm import tqdm
@@ -85,28 +87,26 @@ class Command(BaseCommand):
         try:
             mapped_data = map_kodik_item_to_models(item_data)
             if not mapped_data:
-                # logger.warning(f"Skipping item {item_id_str}: Mapping failed.") # Already logged in mapper
                 return 0
 
             media_item_data = mapped_data.get('media_item_data', {})
             genre_names = mapped_data.get('genres', [])
             country_names = mapped_data.get('countries', [])
             main_link_data = mapped_data.get('main_source_link_data')
-            seasons_data = mapped_data.get('seasons_data', [])
+            seasons_data = mapped_data.get('seasons_data', [])  # Mapped data structure
 
             if not media_item_data.get('title'):
                 logger.warning(f"Skipping item {item_id_str} due to missing title after mapping.")
                 return 0
 
             lookup_fields = {}
-            create_kwargs = {}  # Arguments used ONLY if creating the item
+            create_kwargs = {}
             id_fields_priority = ['kinopoisk_id', 'shikimori_id', 'imdb_id', 'mydramalist_id']
             found_id_field = None
 
             for field in id_fields_priority:
                 if media_item_data.get(field):
                     lookup_fields[field] = media_item_data[field]
-                    # For creation, use the exact field name
                     create_kwargs[field] = media_item_data[field]
                     found_id_field = field
                     break
@@ -114,13 +114,11 @@ class Command(BaseCommand):
             if not found_id_field:
                 if media_item_data.get('release_year') and media_item_data.get(
                         'media_type') != MediaItem.MediaType.UNKNOWN:
-                    # Use case-insensitive for lookup
                     lookup_fields = {
                         'title__iexact': media_item_data['title'],
                         'release_year': media_item_data['release_year'],
                         'media_type': media_item_data['media_type'],
                     }
-                    # Use exact fields for creation based on the lookup match
                     create_kwargs = {
                         'title': media_item_data['title'],
                         'release_year': media_item_data['release_year'],
@@ -132,9 +130,7 @@ class Command(BaseCommand):
                     return 0
 
             defaults_for_update = media_item_data.copy()
-            # Remove fields used for lookup/creation from defaults
             for key in list(lookup_fields.keys()) + list(create_kwargs.keys()):
-                # Handle lookup keys like 'title__iexact' - remove base field name 'title'
                 base_key = key.split('__')[0]
                 defaults_for_update.pop(base_key, None)
 
@@ -144,7 +140,6 @@ class Command(BaseCommand):
                 media_item = MediaItem.objects.get(**lookup_fields)
             except MediaItem.DoesNotExist:
                 try:
-                    # Combine exact lookup fields (like kinopoisk_id or title/year/type) with other mapped data for creation
                     final_create_kwargs = {**create_kwargs, **defaults_for_update}
                     media_item = MediaItem.objects.create(**final_create_kwargs)
                     created = True
@@ -178,9 +173,7 @@ class Command(BaseCommand):
 
                 if not created:
                     update_fields_list = list(defaults_for_update.keys())
-                    if not update_fields_list:
-                        self._log(f"    No fields to update for existing MediaItem {media_item.id}", verbosity=3)
-                    else:
+                    if update_fields_list:
                         for field, value in defaults_for_update.items():
                             setattr(media_item, field, value)
                         try:
@@ -191,15 +184,20 @@ class Command(BaseCommand):
                         except Exception as e:
                             logger.exception(f"Error saving updated fields for existing MediaItem {media_item.id}: {e}")
                             return 0
+                    else:
+                        self._log(f"    No fields to update for existing MediaItem {media_item.id}", verbosity=3)
 
                 try:
                     genres_to_set = [Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0]
                                      for name in genre_names]
-                    media_item.genres.set(genres_to_set)
+                    if genres_to_set or genre_names == []:
+                        media_item.genres.set(genres_to_set)
+
                     countries_to_set = [
                         Country.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for name in
                         country_names]
-                    media_item.countries.set(countries_to_set)
+                    if countries_to_set or country_names == []:
+                        media_item.countries.set(countries_to_set)
                     self._log(f"    Updated M2M for {media_item.id}", verbosity=3)
                 except Exception as e:
                     logger.error(f"Error updating M2M for MediaItem {media_item.id} during update: {e}")
@@ -232,14 +230,15 @@ class Command(BaseCommand):
                         logger.warning(
                             f"Skipping main link for MediaItem {media_item.id} due to missing source_specific_id.")
 
-                if seasons_data:
-                    api_seasons_data = item_data.get('seasons', {})  # Use original data for accurate iteration
+                # Use original item_data['seasons'] for iteration as it has screenshot info if requested
+                api_seasons_data = item_data.get('seasons', {})
+                if api_seasons_data:
                     for season_num_str, season_content in api_seasons_data.items():
                         try:
                             season_number = int(season_num_str)
                         except (ValueError, TypeError):
                             continue
-                        if season_number < -1: continue
+                        if season_number < -1: continue  # Allow Specials (-1)
 
                         episodes_list_data = season_content.get('episodes') if isinstance(season_content,
                                                                                           dict) else None
@@ -263,11 +262,17 @@ class Command(BaseCommand):
 
                                 episode_title = None
                                 episode_link = None
+                                episode_screenshots = []
+
                                 if isinstance(episode_content, str):
                                     episode_link = episode_content
                                 elif isinstance(episode_content, dict):
                                     episode_link = episode_content.get('link')
                                     episode_title = episode_content.get('title')
+                                    screenshots_raw = episode_content.get('screenshots')
+                                    if isinstance(screenshots_raw, list):
+                                        episode_screenshots = [s for s in screenshots_raw if
+                                                               isinstance(s, str) and s.startswith('http')]
 
                                 try:
                                     episode, episode_created = Episode.objects.update_or_create(
@@ -279,13 +284,29 @@ class Command(BaseCommand):
                                     logger.error(f"Error getting/creating Episode {episode_number} for {season}: {e}")
                                     continue
 
+                                if episode_screenshots:
+                                    # current_episode_screenshots[episode.pk] = set(episode_screenshots) # For potential cleanup logic later
+                                    saved_ss_count = 0
+                                    for screenshot_url in episode_screenshots:
+                                        try:
+                                            _, ss_created = Screenshot.objects.get_or_create(
+                                                episode=episode, url=screenshot_url
+                                            )
+                                            if ss_created: saved_ss_count += 1
+                                        except IntegrityError:
+                                            pass  # Ignore duplicate URL errors silently? Or log warning.
+                                        except Exception as e:
+                                            logger.error(f"Error saving screenshot {screenshot_url} for {episode}: {e}")
+                                    if saved_ss_count > 0:
+                                        self._log(f"        Added {saved_ss_count} new screenshots for {episode}",
+                                                  verbosity=3)
+
                                 if episode_link:
-                                    # Find translation info from mapped data again, slightly inefficient but safer
                                     translation_info_from_map = mapped_data.get('main_source_link_data', {}).get(
                                         'translation_info')
                                     ep_link_defaults = {
                                         'player_link': episode_link,
-                                        'quality_info': item_data.get('quality'),  # Inherited from item
+                                        'quality_info': item_data.get('quality'),
                                         'translation_info': translation_info_from_map
                                     }
                                     ep_link_lookup = {
@@ -351,6 +372,11 @@ class Command(BaseCommand):
         next_page_link = options['start_page_link']
         page_limit = options['limit_pages']
         target_page = options['target_page']
+
+        if not options['with_episodes_data']:
+            self._log(
+                "Warning: Screenshots are only available with '--with-episodes-data' flag. They might not be saved.",
+                self.style.WARNING)
 
         while True:
             page_count += 1

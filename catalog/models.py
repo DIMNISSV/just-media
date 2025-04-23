@@ -243,3 +243,24 @@ class MediaItemSourceMetadata(models.Model):
         updated_str = self.source_last_updated_at.strftime(
             '%Y-%m-%d %H:%M:%S') if self.source_last_updated_at else 'Never'
         return f"Metadata for '{self.media_item}' from '{self.source.name}' (Source Updated: {updated_str})"
+
+
+class Screenshot(models.Model):
+    """ Represents a screenshot for a specific episode. """
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name='screenshots',
+        verbose_name=_("Episode")
+    )
+    url = models.URLField(_("URL"), max_length=1024, unique=True)  # Assume screenshot URLs are unique
+
+    # Optional: Add fields like width, height, or order if needed
+
+    class Meta:
+        verbose_name = _("Screenshot")
+        verbose_name_plural = _("Screenshots")
+        ordering = ['episode', 'id']  # Order by episode, then by creation order
+
+    def __str__(self):
+        return f"Screenshot for {self.episode}"

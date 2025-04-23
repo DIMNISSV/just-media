@@ -1,7 +1,7 @@
 # catalog/views.py
 from django.views.generic import ListView, DetailView
 
-from .models import MediaItem, MediaSourceLink
+from .models import MediaItem, MediaSourceLink, Screenshot
 
 
 class MediaItemListView(ListView):
@@ -29,8 +29,9 @@ class MediaItemDetailView(DetailView):
         return MediaItem.objects.prefetch_related(
             'genres',
             'countries',
-            'source_links__source',  # Prefetch source for each link
-            'seasons__episodes__source_links__source'  # Prefetch links for each episode in each season
+            'source_metadata__source',
+            'seasons__episodes__screenshots',
+            'seasons__episodes__source_links__source'
         ).all()
 
     # Optional: Add extra context if needed

@@ -1,0 +1,11 @@
+/* static/css/base.css */
+.episode-selector.border-primary {
+    /* Style for the selected episode */
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5); /* Bootstrap's focus ring color */
+    transform: scale(1.03);
+    transition: transform 0.1s ease-in-out;
+}
+.episode-selector .card-img-top {
+    aspect-ratio: 16 / 9; /* Maintain aspect ratio for images/placeholders */
+    object-fit: cover; /* Cover the area without stretching */
+}
