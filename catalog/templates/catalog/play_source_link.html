@@ -7,20 +7,25 @@
 {% endblock title %}
 
 {% block content %}
-    {# --- Basic Header --- #}
+    {# --- Header --- #}
     <h2>
         {% trans "Watching" %}: {{ media_title }}
         {% if episode_str %}({{ episode_str }}){% endif %}
         <small>({% blocktrans with source_name=source_link.source.name %}via {{ source_name }}{% endblocktrans %}
             )</small>
     </h2>
-    <p>{{ source_link.translation_info|default:"" }} - {{ source_link.quality_info|default:"" }}</p>
+    {# Display initially loaded translation info #}
+    <p id="initial-translation-info">{{ source_link.translation_info|default:"" }}
+        - {{ source_link.quality_info|default:"" }}</p>
+    <p id="current-translation-info"
+       style="display: none; color: #555; font-style: italic;">{% trans "Currently playing" %}: <span
+            id="current-translation-title"></span></p>
+
 
     {# --- Iframe Player --- #}
     <div class="player-container"
          style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000;">
-        {# Aspect ratio 16:9 #}
-        <iframe src="{{ source_link.player_link }}"
+        <iframe id="kodik-player" {# Initial src will be set by JS #}
                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
                 frameborder="0"
                 scrolling="no"
@@ -30,9 +35,120 @@
         </iframe>
     </div>
 
-    {# --- Back Link --- #}
-    <p style="margin-top: 15px;">
-        <a href="{{ back_url }}">{% trans "Back to Media Details" %}</a>
-    </p>
+    {# --- Controls --- #}
+    <div style="margin-top: 15px;">
+        {# Button to reset preferred translation #}
+        <button id="reset-translation-btn" type="button">{% trans "Reset to Default Translation" %}</button>
 
+        {# Placeholder for Next/Prev episode buttons if you add them later #}
+        {# <button id="prev-episode-btn" type="button">{% trans "Previous Episode" %}</button> #}
+        {# <button id="next-episode-btn" type="button">{% trans "Next Episode" %}</button> #}
+
+        {# Back Link #}
+        <a href="{{ back_url }}" style="margin-left: 15px;">{% trans "Back to Media Details" %}</a>
+    </div>
+
+    <script>
+        console.log('Loaded')
+        document.addEventListener('DOMContentLoaded', function () {
+            const iframe = document.getElementById('kodik-player');
+            const defaultSrc = "{{ source_link.player_link|escapejs }}"; // Get default URL from Django context
+            const storageKey = `kodik_preferred_translation_{{ source_link.media_item_id|default:source_link.episode.season.media_item_id }}`; // Unique key per media item
+            const resetBtn = document.getElementById('reset-translation-btn');
+            const currentTranslationDisplay = document.getElementById('current-translation-info');
+            const currentTranslationTitle = document.getElementById('current-translation-title');
+
+            let preferredTranslationId = localStorage.getItem(storageKey);
+            let currentSrc = defaultSrc;
+
+            // Function to construct URL with parameters
+            function getModifiedSrc(baseSrc, translationId) {
+                if (!translationId) return baseSrc;
+                try {
+                    const url = new URL(baseSrc.startsWith('//') ? `https:${baseSrc}` : baseSrc);
+                    url.searchParams.set('only_translations', translationId);
+                    url.searchParams.set('auto_translation', 'true');
+                    // Return protocol-relative URL if original was, otherwise full URL
+                    return baseSrc.startsWith('//') ? url.toString().substring(url.protocol.length) : url.toString();
+                } catch (e) {
+                    console.error("Error modifying URL:", e);
+                    return baseSrc; // Fallback to default if URL parsing fails
+                }
+            }
+
+            // Set initial iframe source based on preference
+            if (preferredTranslationId) {
+                console.log(`Found preferred translation ID: ${preferredTranslationId}`);
+                currentSrc = getModifiedSrc(defaultSrc, preferredTranslationId);
+            } else {
+                console.log("No preferred translation found, using default.");
+            }
+            iframe.src = currentSrc;
+            console.log("Initial iframe src:", currentSrc);
+
+            // Listener for messages from the player iframe
+            function kodikMessageListener(event) {
+                // Basic security check: verify the origin of the message if possible
+                // if (event.origin !== 'expected-kodik-domain') return;
+
+                if (event.data && event.data.key === 'kodik_player_current_episode') {
+                    const value = event.data.value;
+                    console.log('Received kodik_player_current_episode:', value);
+                    if (value && value.translation && value.translation.id) {
+                        const receivedTranslationId = value.translation.id.toString(); // Ensure string for comparison/storage
+                        const receivedTranslationTitle = value.translation.title;
+
+                        // Update the display of the currently playing translation
+                        if (currentTranslationTitle) {
+                            currentTranslationTitle.textContent = receivedTranslationTitle || '{% trans "Unknown" %}';
+                        }
+                        if (currentTranslationDisplay) {
+                            currentTranslationDisplay.style.display = 'block';
+                        }
+
+
+                        // Save the *currently playing* translation ID as the new preference
+                        // This happens *after* the user selects in player and starts playing
+                        localStorage.setItem(storageKey, receivedTranslationId);
+                        preferredTranslationId = receivedTranslationId; // Update local variable
+                        console.log(`Saved preferred translation ID: ${receivedTranslationId}`);
+                    }
+                }
+                // Add handlers for other events if needed (e.g., time_update for progress)
+                // else if (event.data && event.data.key === 'kodik_player_time_update') { ... }
+            }
+
+            // Attach the listener
+            if (window.addEventListener) {
+                window.addEventListener('message', kodikMessageListener);
+            } else {
+                window.attachEvent('onmessage', kodikMessageListener); // For older IE
+            }
+
+            // Handler for the reset button
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function () {
+                    console.log('Resetting translation preference...');
+                    localStorage.removeItem(storageKey);
+                    preferredTranslationId = null;
+                    if (currentTranslationDisplay) {
+                        currentTranslationDisplay.style.display = 'none';
+                    }
+                    // Reload iframe with default src
+                    iframe.src = defaultSrc;
+                    console.log("Iframe reloaded with default src:", defaultSrc);
+                });
+            }
+
+            // Cleanup listener on page unload (optional but good practice)
+            window.addEventListener('unload', function () {
+                if (window.removeEventListener) {
+                    window.removeEventListener('message', kodikMessageListener);
+                } else {
+                    window.detachEvent('onmessage', kodikMessageListener);
+                }
+            });
+
+        });
+    </script>
 {% endblock content %}
