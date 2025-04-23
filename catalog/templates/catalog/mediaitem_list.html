@@ -1,49 +1,57 @@
 {# catalog/templates/catalog/mediaitem_list.html #}
-<h1>Media Catalog</h1>
+{% extends "base.html" %} {# <<< Inherit from CMS base template #}
+{% load i18n %} {# Optional: Load i18n tags if needed #}
 
-{% if media_items %}
-    <ul>
-        {% for item in media_items %}
-            <li>
-                {# Link to the detail view using the URL name defined in urls.py #}
-                <a href="{% url 'catalog:mediaitem_detail' pk=item.pk %}">
-                    {{ item.title }}
-                    {% if item.release_year %}({{ item.release_year }}){% endif %}
-                </a>
-                <small>[{{ item.get_media_type_display }}]</small>
-                {% if item.genres.all %}
-                    <br>Genres:
-                    {% for genre in item.genres.all %}
-                        {{ genre.name }}{% if not forloop.last %}, {% endif %}
-                    {% endfor %}
-                {% endif %}
-            </li>
-        {% empty %}
-            <li>No media items found.</li>
-        {% endfor %}
-    </ul>
+{% block title %}{% trans "Media Catalog" %} - {{ block.super }}{% endblock title %} {# Optional: Set page title #}
 
-    {# Optional: Pagination controls #}
-    {% if is_paginated %}
-        <div class="pagination">
-            <span class="step-links">
-                {% if page_obj.has_previous %}
-                    <a href="?page=1">« first</a>
-                    <a href="?page={{ page_obj.previous_page_number }}">previous</a>
-                {% endif %}
+{% block content %} {# <<< Wrap content in the main block #}
+    <h1>{% trans "Media Catalog" %}</h1>
 
-                <span class="current">
-                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+    {% if media_items %}
+        <ul>
+            {% for item in media_items %}
+                <li>
+                    {# Link to the detail view using the URL name defined in urls.py #}
+                    <a href="{% url 'catalog:mediaitem_detail' pk=item.pk %}">
+                        {{ item.title }}
+                        {% if item.release_year %}({{ item.release_year }}){% endif %}
+                    </a>
+                    <small>[{{ item.get_media_type_display }}]</small>
+                    {% if item.genres.all %}
+                        <br>{% trans "Genres" %}:
+                        {% for genre in item.genres.all %}
+                            {{ genre.name }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </li>
+            {% empty %}
+                <li>{% trans "No media items found." %}</li>
+            {% endfor %}
+        </ul>
+
+        {# Optional: Pagination controls #}
+        {% if is_paginated %}
+            <div class="pagination">
+                <span class="step-links">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1">« {% trans "first" %}</a>
+                        <a href="?page={{ page_obj.previous_page_number }}">{% trans "previous" %}</a>
+                    {% endif %}
+
+                    <span class="current">
+                        {% blocktrans %}Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                            .{% endblocktrans %}
+                    </span>
+
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}">{% trans "next" %}</a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}">{% trans "last" %} »</a>
+                    {% endif %}
                 </span>
+            </div>
+        {% endif %}
 
-                {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}">next</a>
-                    <a href="?page={{ page_obj.paginator.num_pages }}">last »</a>
-                {% endif %}
-            </span>
-        </div>
+    {% else %}
+        <p>{% trans "No media items available in the catalog yet." %}</p>
     {% endif %}
-
-{% else %}
-    <p>No media items available in the catalog yet.</p>
-{% endif %}
+{% endblock content %} {# <<< End content block #}

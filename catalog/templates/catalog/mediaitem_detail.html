@@ -1,92 +1,105 @@
 {# catalog/templates/catalog/mediaitem_detail.html #}
+{% extends "base.html" %} {# <<< Inherit from CMS base template #}
+{% load i18n %}
 
-<h1>{{ media_item.title }} {% if media_item.release_year %}({{ media_item.release_year }}){% endif %}</h1>
+{% block title %}{{ media_item.title }} - {% trans "Catalog" %} - {{ block.super }}{% endblock title %}
 
-{% if media_item.original_title and media_item.original_title != media_item.title %}
-    <p><em>Original Title: {{ media_item.original_title }}</em></p>
-{% endif %}
+{% block content %} {# <<< Wrap content in the main block #}
+    <h1>{{ media_item.title }} {% if media_item.release_year %}({{ media_item.release_year }}){% endif %}</h1>
 
-<p><strong>Type:</strong> {{ media_item.get_media_type_display }}</p>
+    {% if media_item.original_title and media_item.original_title != media_item.title %}
+        <p><em>{% trans "Original Title" %}: {{ media_item.original_title }}</em></p>
+    {% endif %}
 
-{% if media_item.poster_url %}
-    <img src="{{ media_item.poster_url }}" alt="Poster for {{ media_item.title }}"
-         style="max-width: 200px; height: auto;">
-{% endif %}
+    <p><strong>{% trans "Type" %}:</strong> {{ media_item.get_media_type_display }}</p>
 
-{% if media_item.description %}
-    <h2>Description</h2>
-    <p>{{ media_item.description|linebreaksbr }}</p>
-{% endif %}
+    {% if media_item.poster_url %}
+        <img src="{{ media_item.poster_url }}" alt="Poster for {{ media_item.title }}"
+             style="max-width: 200px; height: auto; float: left; margin-right: 15px; margin-bottom: 15px;">
+    {% endif %}
 
-{% if media_item.genres.all %}
-    <p><strong>Genres:</strong>
-        {% for genre in media_item.genres.all %}
-            {{ genre.name }}{% if not forloop.last %}, {% endif %}
+    {% if media_item.description %}
+        <h2>{% trans "Description" %}</h2>
+        <p>{{ media_item.description|linebreaksbr }}</p>
+    {% endif %}
+
+    <div style="clear: both;"></div> {# Clear float for poster #}
+
+    {% if media_item.genres.all %}
+        <p><strong>{% trans "Genres" %}:</strong>
+            {% for genre in media_item.genres.all %}
+                {{ genre.name }}{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+    {% endif %}
+
+    {% if media_item.countries.all %}
+        <p><strong>{% trans "Countries" %}:</strong>
+            {% for country in media_item.countries.all %}
+                {{ country.name }}{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+    {% endif %}
+
+    {# Display source links for the main item #}
+    <h2>{% trans "Sources" %}</h2>
+    <ul>
+        {% for link in media_item.source_links.all %}
+            {% if link.episode is None %}
+                <li>
+                    <a href="{% url 'catalog:play_source_link' pk=link.pk %}">
+                        {% blocktrans with source_name=link.source.name %}Play on {{ source_name }}{% endblocktrans %}
+                    </a>
+                    ({{ link.translation_info|default:"N/A" }} - {{ link.quality_info|default:"N/A" }})
+                </li>
+            {% endif %}
+        {% empty %}
+            <li>{% trans "No direct sources found for this item." %}</li>
         {% endfor %}
-    </p>
-{% endif %}
+    </ul>
 
-{% if media_item.countries.all %}
-    <p><strong>Countries:</strong>
-        {% for country in media_item.countries.all %}
-            {{ country.name }}{% if not forloop.last %}, {% endif %}
+
+    {# Display Seasons and Episodes #}
+    {% if media_item.seasons.all %}
+        <h2>{% trans "Seasons and Episodes" %}</h2>
+        {% for season in media_item.seasons.all|dictsort:"season_number" %}
+            <h3>{{ season }}</h3> {# Uses the custom __str__ representation #}
+            {% if season.episodes.all %}
+                <ul>
+                    {% for episode in season.episodes.all|dictsort:"episode_number" %}
+                        <li>
+                            {% blocktrans with ep_num=episode.episode_number %}Episode {{ ep_num }}{% endblocktrans %}
+                            {% if episode.title %}: {{ episode.title }}{% endif %}
+                            {% if episode.source_links.all %}
+                                <ul>
+                                    {% for ep_link in episode.source_links.all %}
+                                        <li>
+                                            <a href="{% url 'catalog:play_source_link' pk=ep_link.pk %}">
+                                                {% blocktrans with source_name=ep_link.source.name %}Play on
+                                                    {{ source_name }}{% endblocktrans %}
+                                            </a>
+                                            ({{ ep_link.translation_info|default:"N/A" }}
+                                            - {{ ep_link.quality_info|default:"N/A" }})
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <small>({% trans "No sources found for this episode" %})</small>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{% trans "No episodes listed for this season." %}</p>
+            {% endif %}
         {% endfor %}
-    </p>
-{% endif %}
+    {% endif %}
 
-{# Display source links for the main item (e.g., movie link) #}
-<h2>Sources</h2>
-<ul>
-    {% for link in media_item.source_links.all %}
-        {% if link.episode is None %} {# Only show links directly attached to the media item #}
-            <li>
-                <a href="{{ link.player_link }}" target="_blank">
-                    Play on {{ link.source.name }}
-                </a>
-                ({{ link.translation_info|default:"N/A" }} - {{ link.quality_info|default:"N/A" }})
-            </li>
-        {% endif %}
-    {% empty %}
-        <li>No direct sources found for this item.</li>
-    {% endfor %}
-</ul>
+    <hr>
+    {# Link back to the list view page (assuming it's the parent or root page of the apphook) #}
+    {# This requires the page object in context, which apphooks provide #}
+    {# Or use a fixed URL if you know where the list page is #}
+    <p><a href="{% url 'catalog:mediaitem_list' %}">{% trans "Back to Catalog List" %}</a></p>
+    {# Simple link back for now #}
 
-
-{# Display Seasons and Episodes if it's a series type #}
-{% if media_item.seasons.all %}
-    <h2>Seasons and Episodes</h2>
-    {% for season in media_item.seasons.all|dictsort:"season_number" %}
-        {# Use the custom __str__ representation #}
-        <h3>{{ season }}</h3>
-        {% if season.episodes.all %}
-            <ul>
-                {% for episode in season.episodes.all|dictsort:"episode_number" %}
-                    <li>
-                        Episode {{ episode.episode_number }} {% if episode.title %}: {{ episode.title }}{% endif %}
-                        {# List links for this specific episode #}
-                        {% if episode.source_links.all %}
-                            <ul>
-                                {% for ep_link in episode.source_links.all %}
-                                    <li>
-                                        <a href="{{ ep_link.player_link }}" target="_blank">
-                                            Play on {{ ep_link.source.name }}
-                                        </a>
-                                        ({{ ep_link.translation_info|default:"N/A" }}
-                                        - {{ ep_link.quality_info|default:"N/A" }})
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                        {% else %}
-                            <small>(No sources found for this episode)</small>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>No episodes listed for this season.</p>
-        {% endif %}
-    {% endfor %}
-{% endif %}
-
-<hr>
-<p><a href="{% url 'catalog:mediaitem_list' %}">Back to Catalog List</a></p>
+{% endblock content %} {# <<< End content block #}

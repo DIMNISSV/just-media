@@ -1,6 +1,7 @@
 # catalog/models.py
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 
@@ -112,6 +113,10 @@ class MediaItem(models.Model):
     def __str__(self):
         year_str = f" ({self.release_year})" if self.release_year else ""
         return f"{self.title}{year_str} [{self.get_media_type_display()}]"
+
+    def get_absolute_url(self):
+        """ Returns the URL to the detail page for this item. """
+        return reverse('catalog:mediaitem_detail', kwargs={'pk': self.pk})
 
 
 class Season(models.Model):

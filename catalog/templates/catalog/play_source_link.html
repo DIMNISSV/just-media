@@ -1,0 +1,38 @@
+{# catalog/templates/catalog/play_source_link.html #}
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}
+    {% trans "Watching" %} {{ media_title }} {% if episode_str %}({{ episode_str }}){% endif %} - {{ block.super }}
+{% endblock title %}
+
+{% block content %}
+    {# --- Basic Header --- #}
+    <h2>
+        {% trans "Watching" %}: {{ media_title }}
+        {% if episode_str %}({{ episode_str }}){% endif %}
+        <small>({% blocktrans with source_name=source_link.source.name %}via {{ source_name }}{% endblocktrans %}
+            )</small>
+    </h2>
+    <p>{{ source_link.translation_info|default:"" }} - {{ source_link.quality_info|default:"" }}</p>
+
+    {# --- Iframe Player --- #}
+    <div class="player-container"
+         style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000;">
+        {# Aspect ratio 16:9 #}
+        <iframe src="{{ source_link.player_link }}"
+                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+                frameborder="0"
+                scrolling="no"
+                allowfullscreen="allowfullscreen"
+                webkitallowfullscreen="webkitallowfullscreen"
+                mozallowfullscreen="mozallowfullscreen">
+        </iframe>
+    </div>
+
+    {# --- Back Link --- #}
+    <p style="margin-top: 15px;">
+        <a href="{{ back_url }}">{% trans "Back to Media Details" %}</a>
+    </p>
+
+{% endblock content %}
