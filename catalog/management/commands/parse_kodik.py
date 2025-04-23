@@ -1,21 +1,21 @@
 # catalog/management/commands/parse_kodik.py
 
-import json
 import logging
 import time
+import json
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
-
 from dateutil.parser import isoparse
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction, IntegrityError
-
+from django.conf import settings
+from django.db.models import Q  # Import Q objects for complex lookups if needed later
 from catalog.models import (
     MediaItem, Genre, Country, Source, Season, Episode, MediaSourceLink,
     MediaItemSourceMetadata, Screenshot
 )
 from catalog.services.kodik_client import KodikApiClient
 from catalog.services.kodik_mapper import map_kodik_item_to_models
+from typing import Dict, Any, Optional
 
 try:
     from tqdm import tqdm
@@ -29,7 +29,7 @@ KODIK_SOURCE_SLUG = 'kodik'
 
 
 class Command(BaseCommand):
-    help = 'Parses media data from the Kodik API and updates the local database, checking timestamps.'
+    help = 'Parses media data from the Kodik API and updates the local database.'
 
     def add_arguments(self, parser):
         parser.add_argument('--limit-pages', type=int, default=None, dest='limit_pages',
@@ -40,7 +40,7 @@ class Command(BaseCommand):
                             help='Fetch pages sequentially but only start processing from this page number.')
         parser.add_argument('--limit-items-per-page', type=int, default=KodikApiClient.DEFAULT_LIMIT,
                             dest='limit_items_per_page',
-                            help=f'Number of items to request per API page (1-100, default: {KodikApiClient.DEFAULT_LIMIT}).')
+                            help=f'Number of items per API page (1-100, default: {KodikApiClient.DEFAULT_LIMIT}).')
         parser.add_argument('--types', type=str, default=None, help='Comma-separated list of media types to fetch.')
         parser.add_argument('--year', type=str, default=None, help='Filter by year or comma-separated years.')
         parser.add_argument('--sort-by', type=str, default='updated_at', dest='sort',
@@ -53,6 +53,8 @@ class Command(BaseCommand):
                             help='Request detailed season and episode data.')
         parser.add_argument('--force-update-links', action='store_true',
                             help='Update/create source links even if main item data is not newer.')
+        parser.add_argument('--fill-empty-fields', action='store_true',
+                            help='Update empty fields on existing items even if API data is not newer.')
 
     def _get_kodik_source(self) -> Source:
         try:
@@ -66,7 +68,8 @@ class Command(BaseCommand):
             self.stdout.write(styled_message, ending=ending)
 
     @transaction.atomic
-    def _process_single_item(self, item_data: Dict[str, Any], kodik_source: Source, force_update_links: bool) -> int:
+    def _process_single_item(self, item_data: Dict[str, Any], kodik_source: Source, force_update_links: bool,
+                             fill_empty_fields: bool) -> int:
         item_id_str = item_data.get('id', 'N/A')
         api_updated_at_str = item_data.get('updated_at')
         api_updated_at: Optional[datetime] = None
@@ -93,7 +96,7 @@ class Command(BaseCommand):
             genre_names = mapped_data.get('genres', [])
             country_names = mapped_data.get('countries', [])
             main_link_data = mapped_data.get('main_source_link_data')
-            seasons_data = mapped_data.get('seasons_data', [])  # Mapped data structure
+            seasons_data = mapped_data.get('seasons_data', [])
 
             if not media_item_data.get('title'):
                 logger.warning(f"Skipping item {item_id_str} due to missing title after mapping.")
@@ -164,48 +167,65 @@ class Command(BaseCommand):
             )
 
             should_update_main_data = False
+            fields_to_update = {}
+
             if meta_created or metadata.source_last_updated_at is None or api_updated_at > metadata.source_last_updated_at:
                 should_update_main_data = True
+                fields_to_update = defaults_for_update  # Update all fields if newer
+            elif fill_empty_fields and not created:  # Check only if item existed and option is enabled
+                for field, value in defaults_for_update.items():
+                    # Update if field is currently empty/null and API provides a value
+                    if not getattr(media_item, field, None) and value:
+                        fields_to_update[field] = value
+                if fields_to_update:
+                    self._log(
+                        f"  Planning to fill empty fields for '{media_item.title}': {list(fields_to_update.keys())}",
+                        verbosity=2)
 
-            if should_update_main_data:
+            if should_update_main_data or fields_to_update:
                 action = "Created" if created else "Updated"
                 self._log(f"  {action} MediaItem fields for: {media_item.id} ('{media_item.title}')", verbosity=2)
 
-                if not created:
-                    update_fields_list = list(defaults_for_update.keys())
-                    if update_fields_list:
-                        for field, value in defaults_for_update.items():
-                            setattr(media_item, field, value)
-                        try:
-                            media_item.save(update_fields=update_fields_list)
-                            self._log(
-                                f"    Updated fields: {', '.join(update_fields_list)} for existing MediaItem {media_item.id}",
-                                verbosity=3)
-                        except Exception as e:
-                            logger.exception(f"Error saving updated fields for existing MediaItem {media_item.id}: {e}")
-                            return 0
-                    else:
-                        self._log(f"    No fields to update for existing MediaItem {media_item.id}", verbosity=3)
+                if not created and fields_to_update:  # Apply updates only if the item existed and there's something to update
+                    update_fields_list = list(fields_to_update.keys())
+                    for field, value in fields_to_update.items():
+                        setattr(media_item, field, value)
+                    try:
+                        media_item.save(update_fields=update_fields_list)
+                        log_reason = "API data newer" if should_update_main_data else "filling empty fields"
+                        self._log(
+                            f"    Updated fields ({log_reason}): {', '.join(update_fields_list)} for existing MediaItem {media_item.id}",
+                            verbosity=3)
+                    except Exception as e:
+                        logger.exception(f"Error saving updated fields for existing MediaItem {media_item.id}: {e}")
+                        return 0
 
-                try:
-                    genres_to_set = [Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0]
-                                     for name in genre_names]
-                    if genres_to_set or genre_names == []:
-                        media_item.genres.set(genres_to_set)
+                if should_update_main_data:  # Update M2M only if the whole record was considered newer
+                    try:
+                        genres_to_set = [
+                            Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for name
+                            in genre_names]
+                        if genres_to_set or genre_names == []:
+                            media_item.genres.set(genres_to_set)
 
-                    countries_to_set = [
-                        Country.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for name in
-                        country_names]
-                    if countries_to_set or country_names == []:
-                        media_item.countries.set(countries_to_set)
-                    self._log(f"    Updated M2M for {media_item.id}", verbosity=3)
-                except Exception as e:
-                    logger.error(f"Error updating M2M for MediaItem {media_item.id} during update: {e}")
+                        countries_to_set = [
+                            Country.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for
+                            name in country_names]
+                        if countries_to_set or country_names == []:
+                            media_item.countries.set(countries_to_set)
+                        self._log(f"    Updated M2M for {media_item.id}", verbosity=3)
+                    except Exception as e:
+                        logger.error(f"Error updating M2M for MediaItem {media_item.id} during update: {e}")
 
-            else:
-                self._log(f"  Skipping main data update for '{media_item.title}' (API data not newer)", verbosity=2)
+            else:  # Case where not should_update_main_data and not fields_to_update
+                if not created:  # Only log skip if the item actually existed before
+                    self._log(
+                        f"  Skipping main data update for '{media_item.title}' (API data not newer and no empty fields to fill)",
+                        verbosity=2)
 
-            if should_update_main_data or force_update_links:
+            update_links_and_episodes = should_update_main_data or force_update_links or fields_to_update  # Update related if any main data changed or forced
+
+            if update_links_and_episodes:
                 processed_episodes_count = 0
 
                 if main_link_data and main_link_data.get('player_link'):
@@ -230,7 +250,6 @@ class Command(BaseCommand):
                         logger.warning(
                             f"Skipping main link for MediaItem {media_item.id} due to missing source_specific_id.")
 
-                # Use original item_data['seasons'] for iteration as it has screenshot info if requested
                 api_seasons_data = item_data.get('seasons', {})
                 if api_seasons_data:
                     for season_num_str, season_content in api_seasons_data.items():
@@ -238,7 +257,7 @@ class Command(BaseCommand):
                             season_number = int(season_num_str)
                         except (ValueError, TypeError):
                             continue
-                        if season_number < -1: continue  # Allow Specials (-1)
+                        if season_number < -1: continue
 
                         episodes_list_data = season_content.get('episodes') if isinstance(season_content,
                                                                                           dict) else None
@@ -274,6 +293,8 @@ class Command(BaseCommand):
                                         episode_screenshots = [s for s in screenshots_raw if
                                                                isinstance(s, str) and s.startswith('http')]
 
+                                episode = None
+                                episode_created = False
                                 try:
                                     episode, episode_created = Episode.objects.update_or_create(
                                         season=season, episode_number=episode_number, defaults={'title': episode_title}
@@ -282,24 +303,21 @@ class Command(BaseCommand):
                                     if episode_created: self._log(f"    Created {episode}", verbosity=2)
                                 except Exception as e:
                                     logger.error(f"Error getting/creating Episode {episode_number} for {season}: {e}")
-                                    continue
+                                    continue  # Skip screenshots and links if episode fails
 
                                 if episode_screenshots:
-                                    # current_episode_screenshots[episode.pk] = set(episode_screenshots) # For potential cleanup logic later
                                     saved_ss_count = 0
                                     for screenshot_url in episode_screenshots:
                                         try:
-                                            _, ss_created = Screenshot.objects.get_or_create(
-                                                episode=episode, url=screenshot_url
-                                            )
+                                            _, ss_created = Screenshot.objects.get_or_create(episode=episode,
+                                                                                             url=screenshot_url)
                                             if ss_created: saved_ss_count += 1
                                         except IntegrityError:
-                                            pass  # Ignore duplicate URL errors silently? Or log warning.
+                                            pass
                                         except Exception as e:
                                             logger.error(f"Error saving screenshot {screenshot_url} for {episode}: {e}")
-                                    if saved_ss_count > 0:
-                                        self._log(f"        Added {saved_ss_count} new screenshots for {episode}",
-                                                  verbosity=3)
+                                    if saved_ss_count > 0: self._log(
+                                        f"        Added {saved_ss_count} new screenshots for {episode}", verbosity=3)
 
                                 if episode_link:
                                     translation_info_from_map = mapped_data.get('main_source_link_data', {}).get(
@@ -322,7 +340,7 @@ class Command(BaseCommand):
                                     except Exception as e:
                                         logger.error(f"Error saving episode link for {episode}: {e}")
 
-            if should_update_main_data:
+            if should_update_main_data:  # Only update timestamp if main data was processed as newer
                 try:
                     metadata.source_last_updated_at = api_updated_at
                     metadata.save(update_fields=['source_last_updated_at'])
@@ -347,6 +365,7 @@ class Command(BaseCommand):
 
         kodik_source = self._get_kodik_source()
         force_update_links = options['force_update_links']
+        fill_empty_fields = options['fill_empty_fields']  # Get new option value
 
         try:
             client = KodikApiClient()
@@ -366,17 +385,14 @@ class Command(BaseCommand):
         self._log(f"Items per page: {limit_per_page}", verbosity=2)
         if options['target_page']: self._log(f"Will skip processing until page {options['target_page']}", verbosity=1)
         if force_update_links: self._log(f"Will force update/create links even if item data is not newer.", verbosity=1)
+        if fill_empty_fields: self._log(f"Will attempt to fill empty fields even if item data is not newer.",
+                                        verbosity=1)
 
         page_count = 0
         total_processed_items = 0
         next_page_link = options['start_page_link']
         page_limit = options['limit_pages']
         target_page = options['target_page']
-
-        if not options['with_episodes_data']:
-            self._log(
-                "Warning: Screenshots are only available with '--with-episodes-data' flag. They might not be saved.",
-                self.style.WARNING)
 
         while True:
             page_count += 1
@@ -431,8 +447,9 @@ class Command(BaseCommand):
 
                     page_start_time = time.time()
                     for item_data in results_iterable:
-                        items_on_page_processed += self._process_single_item(item_data, kodik_source,
-                                                                             force_update_links)
+                        items_on_page_processed += self._process_single_item(
+                            item_data, kodik_source, force_update_links, fill_empty_fields
+                        )
 
                     page_duration = time.time() - page_start_time
                     total_processed_items += items_on_page_processed
