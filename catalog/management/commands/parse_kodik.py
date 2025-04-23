@@ -76,20 +76,16 @@ class Command(BaseCommand):
                     api_updated_at = api_updated_at.replace(tzinfo=timezone.utc)
             except (ValueError, TypeError) as e:
                 logger.warning(
-                    f"Could not parse updated_at '{api_updated_at_str}' for item {item_id_str}: {e}. Skipping freshness check.")
-                # If we can't parse the date, maybe update anyway? Or skip? Let's skip for safety.
-                # Fallback: Set api_updated_at to a very old date to force update if needed?
-                # Or maybe just skip the item entirely if timestamp is crucial and invalid?
+                    f"Could not parse updated_at '{api_updated_at_str}' for item {item_id_str}: {e}. Skipping.")
                 return 0
         else:
-            logger.warning(
-                f"Missing 'updated_at' in API data for item {item_id_str}. Skipping freshness check and item.")
+            logger.warning(f"Missing 'updated_at' in API data for item {item_id_str}. Skipping.")
             return 0
 
         try:
             mapped_data = map_kodik_item_to_models(item_data)
             if not mapped_data:
-                logger.warning(f"Skipping item {item_id_str}: Mapping failed.")
+                # logger.warning(f"Skipping item {item_id_str}: Mapping failed.") # Already logged in mapper
                 return 0
 
             media_item_data = mapped_data.get('media_item_data', {})
@@ -103,48 +99,68 @@ class Command(BaseCommand):
                 return 0
 
             lookup_fields = {}
+            create_kwargs = {}  # Arguments used ONLY if creating the item
             id_fields_priority = ['kinopoisk_id', 'shikimori_id', 'imdb_id', 'mydramalist_id']
             found_id_field = None
+
             for field in id_fields_priority:
                 if media_item_data.get(field):
                     lookup_fields[field] = media_item_data[field]
+                    # For creation, use the exact field name
+                    create_kwargs[field] = media_item_data[field]
                     found_id_field = field
                     break
 
             if not found_id_field:
                 if media_item_data.get('release_year') and media_item_data.get(
                         'media_type') != MediaItem.MediaType.UNKNOWN:
+                    # Use case-insensitive for lookup
                     lookup_fields = {
                         'title__iexact': media_item_data['title'],
                         'release_year': media_item_data['release_year'],
                         'media_type': media_item_data['media_type'],
                     }
+                    # Use exact fields for creation based on the lookup match
+                    create_kwargs = {
+                        'title': media_item_data['title'],
+                        'release_year': media_item_data['release_year'],
+                        'media_type': media_item_data['media_type'],
+                    }
                 else:
                     logger.warning(
-                        f"Cannot reliably identify item {item_id_str} ('{media_item_data['title']}'): Missing external IDs and year/type.")
+                        f"Cannot reliably identify item {item_id_str} ('{media_item_data['title']}'): Missing required fields for lookup.")
                     return 0
 
-            defaults = media_item_data.copy()
-            for key in lookup_fields.keys():
-                defaults.pop(key, None)
+            defaults_for_update = media_item_data.copy()
+            # Remove fields used for lookup/creation from defaults
+            for key in list(lookup_fields.keys()) + list(create_kwargs.keys()):
+                # Handle lookup keys like 'title__iexact' - remove base field name 'title'
+                base_key = key.split('__')[0]
+                defaults_for_update.pop(base_key, None)
 
             media_item = None
             created = False
-            # Use get first to avoid unnecessary update if check fails
             try:
                 media_item = MediaItem.objects.get(**lookup_fields)
             except MediaItem.DoesNotExist:
                 try:
-                    media_item = MediaItem.objects.create(**lookup_fields, **defaults)
+                    # Combine exact lookup fields (like kinopoisk_id or title/year/type) with other mapped data for creation
+                    final_create_kwargs = {**create_kwargs, **defaults_for_update}
+                    media_item = MediaItem.objects.create(**final_create_kwargs)
                     created = True
                 except IntegrityError as e:
-                    logger.error(f"Integrity error creating MediaItem {item_id_str} with lookup {lookup_fields}: {e}")
+                    logger.error(
+                        f"Integrity error creating MediaItem {item_id_str} with data {final_create_kwargs}: {e}")
+                    return 0
+                except Exception as e:
+                    logger.exception(
+                        f"Unexpected error creating MediaItem {item_id_str} with data {final_create_kwargs}: {e}")
                     return 0
             except Exception as e:
                 logger.exception(f"Unexpected error getting MediaItem {item_id_str} with lookup {lookup_fields}: {e}")
                 return 0
 
-            if media_item is None:  # Should not happen if create didn't raise error, but check anyway
+            if media_item is None:
                 logger.error(f"Failed to get or create MediaItem {item_id_str}.")
                 return 0
 
@@ -160,18 +176,22 @@ class Command(BaseCommand):
                 action = "Created" if created else "Updated"
                 self._log(f"  {action} MediaItem fields for: {media_item.id} ('{media_item.title}')", verbosity=2)
 
-                if not created:  # Apply updates only if the item existed
-                    for field, value in defaults.items():
-                        setattr(media_item, field, value)
-                    try:
-                        media_item.save(update_fields=defaults.keys())  # Only update changed fields
-                        self._log(f"    Updated fields for existing MediaItem {media_item.id}", verbosity=3)
-                    except Exception as e:
-                        logger.exception(f"Error saving updated fields for existing MediaItem {media_item.id}: {e}")
-                        # Continue processing links/M2M even if item save fails? Risky. Let's return.
-                        return 0
+                if not created:
+                    update_fields_list = list(defaults_for_update.keys())
+                    if not update_fields_list:
+                        self._log(f"    No fields to update for existing MediaItem {media_item.id}", verbosity=3)
+                    else:
+                        for field, value in defaults_for_update.items():
+                            setattr(media_item, field, value)
+                        try:
+                            media_item.save(update_fields=update_fields_list)
+                            self._log(
+                                f"    Updated fields: {', '.join(update_fields_list)} for existing MediaItem {media_item.id}",
+                                verbosity=3)
+                        except Exception as e:
+                            logger.exception(f"Error saving updated fields for existing MediaItem {media_item.id}: {e}")
+                            return 0
 
-                # Update M2M only if main data is updated
                 try:
                     genres_to_set = [Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0]
                                      for name in genre_names]
@@ -187,12 +207,9 @@ class Command(BaseCommand):
             else:
                 self._log(f"  Skipping main data update for '{media_item.title}' (API data not newer)", verbosity=2)
 
-            # --- Process Links and Episodes ---
-            # Update links if main data is newer OR if force_update_links is True
             if should_update_main_data or force_update_links:
                 processed_episodes_count = 0
 
-                # Main Link
                 if main_link_data and main_link_data.get('player_link'):
                     link_defaults = {
                         'player_link': main_link_data['player_link'],
@@ -215,20 +232,22 @@ class Command(BaseCommand):
                         logger.warning(
                             f"Skipping main link for MediaItem {media_item.id} due to missing source_specific_id.")
 
-                # Seasons and Episodes
                 if seasons_data:
-                    for season_num_str, season_content in item_data.get('seasons', {}).items():
+                    api_seasons_data = item_data.get('seasons', {})  # Use original data for accurate iteration
+                    for season_num_str, season_content in api_seasons_data.items():
                         try:
                             season_number = int(season_num_str)
                         except (ValueError, TypeError):
                             continue
-                        if season_number < -1: continue  # Allow -1, 0, positive
+                        if season_number < -1: continue
 
                         episodes_list_data = season_content.get('episodes') if isinstance(season_content,
                                                                                           dict) else None
 
                         try:
-                            season, _ = Season.objects.get_or_create(media_item=media_item, season_number=season_number)
+                            season, season_created = Season.objects.get_or_create(media_item=media_item,
+                                                                                  season_number=season_number)
+                            if season_created: self._log(f"    Created {season}", verbosity=2)
                         except Exception as e:
                             logger.error(
                                 f"Error getting/creating Season {season_number} for MediaItem {media_item.id}: {e}")
@@ -240,7 +259,7 @@ class Command(BaseCommand):
                                     episode_number = int(episode_num_str)
                                 except (ValueError, TypeError):
                                     continue
-                                if episode_number <= 0: continue  # Assume episodes are positive
+                                if episode_number <= 0: continue
 
                                 episode_title = None
                                 episode_link = None
@@ -251,26 +270,27 @@ class Command(BaseCommand):
                                     episode_title = episode_content.get('title')
 
                                 try:
-                                    episode, _ = Episode.objects.update_or_create(
+                                    episode, episode_created = Episode.objects.update_or_create(
                                         season=season, episode_number=episode_number, defaults={'title': episode_title}
                                     )
                                     processed_episodes_count += 1
+                                    if episode_created: self._log(f"    Created {episode}", verbosity=2)
                                 except Exception as e:
                                     logger.error(f"Error getting/creating Episode {episode_number} for {season}: {e}")
                                     continue
 
                                 if episode_link:
+                                    # Find translation info from mapped data again, slightly inefficient but safer
+                                    translation_info_from_map = mapped_data.get('main_source_link_data', {}).get(
+                                        'translation_info')
                                     ep_link_defaults = {
                                         'player_link': episode_link,
-                                        'quality_info': item_data.get('quality'),
-                                        'translation_info': map_kodik_item_to_models(item_data).get(
-                                            'main_source_link_data', {}).get('translation_info')
-                                        # Re-map? Risky. Get from item_data?
+                                        'quality_info': item_data.get('quality'),  # Inherited from item
+                                        'translation_info': translation_info_from_map
                                     }
                                     ep_link_lookup = {
                                         'source': kodik_source, 'media_item': None, 'episode': episode,
                                         'source_specific_id': f"{item_id_str}_s{season_number}_e{episode_number}"
-                                        # Reconstruct specific ID
                                     }
                                     try:
                                         _, ep_link_created = MediaSourceLink.objects.update_or_create(
@@ -281,7 +301,6 @@ class Command(BaseCommand):
                                     except Exception as e:
                                         logger.error(f"Error saving episode link for {episode}: {e}")
 
-            # Update metadata timestamp only if main data was processed and potentially updated
             if should_update_main_data:
                 try:
                     metadata.source_last_updated_at = api_updated_at
@@ -392,7 +411,7 @@ class Command(BaseCommand):
                     page_duration = time.time() - page_start_time
                     total_processed_items += items_on_page_processed
                     if TQDM_AVAILABLE and self.verbosity >= 1:
-                        self.stdout.write("\r" + " " * 80 + "\r", ending='')  # Clear line for tqdm
+                        self.stdout.write("\r" + " " * 80 + "\r", ending='')
                     self._log(
                         f"Page {page_count} processed in {page_duration:.2f}s. {items_on_page_processed} items saved/updated checks.",
                         verbosity=1)
@@ -403,7 +422,7 @@ class Command(BaseCommand):
                 self._log("\nNo 'next_page' link found in API response. Assuming end of results.", self.style.NOTICE)
                 break
 
-            # time.sleep(0.1) # Optional delay
+            # time.sleep(0.1)
 
         self._log(f"\nFinished parsing. Total items processed/updated checks in DB: {total_processed_items}",
                   self.style.SUCCESS)
