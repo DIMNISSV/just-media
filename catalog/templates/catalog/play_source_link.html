@@ -8,46 +8,55 @@
 
 {% block content %}
     {# --- Header --- #}
-    <h2>
-        {% trans "Watching" %}: {{ media_title }}
-        {% if episode_str %}({{ episode_str }}){% endif %}
-        <small>({% blocktrans with source_name=source_link.source.name %}via {{ source_name }}{% endblocktrans %}
-            )</small>
-    </h2>
-    <p id="initial-translation-info">{{ source_link.translation_info|default:"" }}
-        - {{ source_link.quality_info|default:"" }}</p>
-    <p id="current-translation-info"
-       style="display: none; color: #555; font-style: italic;">{% trans "Currently playing" %}: <span
-            id="current-translation-title"></span></p>
+    <section>
+        <div class="container">
+            <div class="row">
+                <h2>
+                    {{ request.current_page. }}
+                </h2>
+                <h2>
+                    {% trans "Watching" %}: {{ media_title }}
+                    {% if episode_str %}({{ episode_str }}){% endif %}
+                    <small>({% blocktrans with source_name=source_link.source.name %}via
+                        {{ source_name }}{% endblocktrans %}
+                        )</small>
+                </h2>
+                <p id="initial-translation-info">{{ source_link.translation_info|default:"" }}
+                    - {{ source_link.quality_info|default:"" }}</p>
+                <p id="current-translation-info"
+                   style="display: none; color: #555; font-style: italic;">{% trans "Currently playing" %}: <span
+                        id="current-translation-title"></span></p>
 
 
-    {# --- Iframe Player with data attributes --- #}
-    <div class="player-container"
-         style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000;">
-        <iframe id="kodik-player"
-                {# Pass data needed by JS via data-* attributes #}
-                data-default-src="{{ source_link.player_link|escapejs }}"
-                data-storage-key="kodik_preferred_translation_{{ source_link.media_item_id|default:source_link.episode.season.media_item_id }}"
-                data-unknown-translation="{% trans 'Unknown' %}" {# Pass translated string #}
-                {# Removed src attribute, will be set by JS #}
-                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
-                frameborder="0"
-                scrolling="no"
-                allowfullscreen="allowfullscreen"
-                webkitallowfullscreen="webkitallowfullscreen"
-                mozallowfullscreen="mozallowfullscreen">
-        </iframe>
-    </div>
+                {# --- Iframe Player with data attributes --- #}
+                <div class="player-container"
+                     style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; background: #000;">
+                    <iframe id="kodik-player"
+                            {# Pass data needed by JS via data-* attributes #}
+                            data-default-src="{{ source_link.player_link|escapejs }}"
+                            data-storage-key="kodik_preferred_translation_{{ source_link.media_item_id|default:source_link.episode.season.media_item_id }}"
+                            data-unknown-translation="{% trans 'Unknown' %}" {# Pass translated string #}
+                            {# Removed src attribute, will be set by JS #}
+                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+                            frameborder="0"
+                            scrolling="no"
+                            allowfullscreen="allowfullscreen"
+                            webkitallowfullscreen="webkitallowfullscreen"
+                            mozallowfullscreen="mozallowfullscreen">
+                    </iframe>
+                </div>
 
-    {# --- Controls --- #}
-    <div style="margin-top: 15px;">
-        <button id="reset-translation-btn" type="button">{% trans "Reset to Default Translation" %}</button>
-        {# ... other buttons ... #}
-        <a href="{{ back_url }}" style="margin-left: 15px;">{% trans "Back to Media Details" %}</a>
-    </div>
+                {# --- Controls --- #}
+                <div style="margin-top: 15px;">
+                    <button id="reset-translation-btn" type="button">{% trans "Reset to Default Translation" %}</button>
+                    {# ... other buttons ... #}
+                    <a href="{{ back_url }}" style="margin-left: 15px;">{% trans "Back to Media Details" %}</a>
+                </div>
 
-    {# --- REMOVED SCRIPT BLOCK --- #}
-
+                {# --- REMOVED SCRIPT BLOCK --- #}
+            </div>
+        </div>
+    </section>
 {% endblock content %}
 
 
