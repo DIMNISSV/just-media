@@ -1,11 +1,11 @@
 {# catalog/templates/catalog/mediaitem_detail.html #}
 {% extends "base.html" %}
-{% load i18n static %} {# <<< Добавить static #}
+{% load i18n static l10n %}
 
 {% block title %}{{ media_item.title }} - {% trans "Catalog" %} - {{ block.super }}{% endblock title %}
 
 {% block content %}
-    <div class="container mt-4"> {# Добавим контейнер и отступ сверху #}
+    <div class="container mt-4">
         <div class="row">
             {# --- Левая колонка (Постер и Метаданные) --- #}
             <div class="col-lg-3 col-md-4 mb-3 mb-md-0">
@@ -21,7 +21,8 @@
                 <h5>{% trans "Details" %}</h5>
                 <ul class="list-unstyled small">
                     {% if media_item.release_year %}
-                        <li><strong>{% trans "Year" %}:</strong> {{ media_item.release_year }}</li>{% endif %}
+                        <li><strong>{% trans "Year" %}:</strong> {{ media_item.release_year|unlocalize }}</li>
+                    {% endif %}
                     <li><strong>{% trans "Type" %}:</strong> {{ media_item.get_media_type_display }}</li>
                     {% if media_item.countries.all %}
                         <li><strong>{% trans "Countries" %}:</strong>
@@ -73,11 +74,11 @@
                             <li class="nav-item" role="presentation">
                                 {# Делаем первую вкладку (или 'Specials', если нет S1) активной #}
                                 <button class="nav-link {% if forloop.first %}active{% endif %}"
-                                        id="season-tab-{{ season.pk }}"
+                                        id="season-tab-{{ season.pk|unlocalize }}"
                                         data-bs-toggle="tab"
-                                        data-bs-target="#season-pane-{{ season.pk }}"
+                                        data-bs-target="#season-pane-{{ season.pk|unlocalize }}"
                                         type="button" role="tab"
-                                        aria-controls="season-pane-{{ season.pk }}"
+                                        aria-controls="season-pane-{{ season.pk|unlocalize }}"
                                         aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
                                     {{ season }} {# Используем __str__ модели Season #}
                                 </button>
@@ -89,8 +90,8 @@
                     <div class="tab-content" id="seasons-tab-content">
                         {% for season in media_item.seasons.all|dictsort:"season_number" %}
                             <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
-                                 id="season-pane-{{ season.pk }}" role="tabpanel"
-                                 aria-labelledby="season-tab-{{ season.pk }}" tabindex="0">
+                                 id="season-pane-{{ season.pk|unlocalize }}" role="tabpanel"
+                                 aria-labelledby="season-tab-{{ season.pk|unlocalize }}" tabindex="0">
 
                                 {% if season.episodes.exists %}
                                     {# Контейнер для эпизодов с горизонтальным рядом и переносом #}
@@ -103,13 +104,19 @@
                                                     <a href="#"
                                                        class="episode-selector card h-100 text-decoration-none text-dark"
                                                             {# Передаем ID эпизода и ID его первой ссылки Kodik #}
-                                                       data-episode-pk="{{ episode.pk }}"
-                                                       data-link-pk="{% if first_link %}{{ first_link.pk }}{% endif %}"
-                                                       data-episode-num="{{ episode.episode_number }}"
+                                                       data-episode-pk="{{ episode.pk|unlocalize }}"
+                                                       data-link-pk="{% if first_link %}{{ first_link.pk|unlocalize }}{% endif %}"
+                                                       data-episode-num="{{ episode.episode_number|unlocalize }}"
                                                             {# Для кнопок Next/Prev #}
-                                                       data-season-num="{{ season.season_number }}"
+                                                       data-season-num="{{ season.season_number|unlocalize }}"
                                                             {# Для кнопок Next/Prev #}
                                                        title="
+
+
+
+
+
+
                                                                {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}"
                                                     >
                                                         {% if first_screenshot %}
@@ -169,7 +176,7 @@
 {% endblock content %}
 
 
-{% block extra_js %}
-    {# Загрузка нового JS файла для этой страницы #}
+{% block base_js %}
+    {{ block.super }}
     <script src="{% static 'catalog/js/media_detail_handler.js' %}" defer></script>
-{% endblock extra_js %}
+{% endblock %}

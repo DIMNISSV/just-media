@@ -1,7 +1,6 @@
 {# templates/base.html #}
 {% extends "bootstrap5/base.html" %} {# <<< Наследуем от базового шаблона CMS #}
 {% load cms_tags menu_tags static i18n sekizai_tags %} {# Добавляем static #}
-
 {# --- CSS --- #}
 {% block base_css %}
     {# Используем стандартный Bootstrap из родительского шаблона #}
@@ -56,18 +55,9 @@
 
 {# --- JavaScript --- #}
 {% block base_js %}
-    {# Загружаем Bootstrap JS из родителя #}
     {{ block.super }}
-    {# Загружаем наш скрипт переключения темы #}
     <script src="{% static 'js/theme_switcher.js' %}" defer></script>
-    {# Загружаем скрипт обработчика плеера Kodik (если он нужен глобально, иначе - в extra_js) #}
-    {# Если обработчик нужен только на странице плеера, оставьте его там #}
-    {# <script src="{% static 'catalog/js/kodik_player_handler.js' %}" defer></script> #}
 {% endblock %}
 
-{# Оставляем возможность для добавления JS/CSS из дочерних шаблонов и плагинов CMS #}
-{% block end_js %}{% endblock %}
+{% block extra_js %}{% endblock %}
 {% block bottom_css %}{% endblock %}
-
-{# Переопределение body_attrs для установки темы из JS (менее надежно чем на html) #}
-{# Мы будем использовать атрибут на <html>, устанавливаемый JS #}
