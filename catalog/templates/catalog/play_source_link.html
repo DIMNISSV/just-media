@@ -26,15 +26,13 @@
 <body>
 
 {# Use the URL possibly modified by the view to include start_from #}
-<iframe src="{{ player_url_with_start }}" {# Changed from source_link.player_link #}
+<iframe src="{{ player_url_with_start }}"
         allowfullscreen="allowfullscreen"
         webkitallowfullscreen="webkitallowfullscreen"
         mozallowfullscreen="mozallowfullscreen"
-        loading="eager"> {# Load the player immediately #}
+        loading="eager">
 </iframe>
 
-{# Optional: Add JS event listeners here to communicate with parent window if needed later #}
-{# e.g., for tracking progress #}
 <script>
     // Basic tracking: Inform parent when iframe is loaded
     window.addEventListener('load', () => {
@@ -42,13 +40,8 @@
             const mediaInfo = {
                 type: 'playerLoaded',
                 linkPk: '{{ source_link.pk|unlocalize }}',
-                mediaPk: '
-                {% if source_link.episode %}
-                    {{ source_link.media_item.pk|default:source_link.episode.season.media_item.pk|unlocalize }}
-                {% else %}
-                    {{ source_link.media_item.pk|default:source_link.media_item.pk|unlocalize }}
-                {% endif %}
-                ',
+                // Safely get media_item PK, checking both episode and direct link
+                mediaPk: '{% firstof source_link.media_item.pk source_link.episode.season.media_item.pk as media_pk %}{{ media_pk|unlocalize|default:"" }}',
                 episodePk: '{{ source_link.episode.pk|unlocalize|default:"" }}',
                 translationId: '{{ source_link.translation.kodik_id|default:"" }}'
             };
@@ -58,12 +51,6 @@
             console.error("Error sending postMessage from iframe:", e);
         }
     });
-
-    // Listen for messages FROM parent (e.g., to control player)
-    // window.addEventListener('message', (event) => {
-    //    console.log("Message received in iframe:", event.data);
-    //    if (event.data.action === 'seek') { /* ... interact with player API ... */ }
-    // });
 </script>
 
 </body>

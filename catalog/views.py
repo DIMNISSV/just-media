@@ -78,7 +78,7 @@ class MediaItemDetailView(DetailView):
                                 if link.translation:
                                     start_from = self._extract_start_from(link.player_link)
                                     episode_links.append({
-                                        'translation_id': link.translation.kodik_id,  # Keep ID here
+                                        'translation_id': link.translation.kodik_id,
                                         'translation_title': link.translation.title,
                                         'link_pk': link.pk,
                                         'quality': link.quality_info,
@@ -91,9 +91,8 @@ class MediaItemDetailView(DetailView):
             for link in media_item.main_source_links:
                 if link.translation:
                     start_from = self._extract_start_from(link.player_link)
-                    # Store data with translation_id included in the value object
                     main_links_data[link.translation.kodik_id] = {
-                        'translation_id': link.translation.kodik_id,  # *** ADDED THIS LINE ***
+                        'translation_id': link.translation.kodik_id,
                         'link_pk': link.pk,
                         'translation_title': link.translation.title,
                         'quality': link.quality_info,
@@ -101,14 +100,23 @@ class MediaItemDetailView(DetailView):
                     }
 
         context['episodes_links_json'] = json.dumps(episodes_data)
-        # The structure passed to JSON is now correct for Object.values() in JS
         context['main_links_json'] = json.dumps(main_links_data)
         context['has_main_links'] = bool(main_links_data)
+        # Pass translated strings needed by JS to the context
+        context['js_translations'] = json.dumps({
+            'error_loading_player': _("Error loading player."),
+            'no_content_available': _("No content available."),
+            'select_translation': _("Select a translation to start watching"),
+            'select_episode': _("Select an episode to start watching"),
+            'select_episode_or_translation': _("Select an episode or translation to start watching"),
+            'no_translations_for_episode': _("No translations found for this episode."),
+            'player_only_unavailable': _("Player only option unavailable (no main item link found)"),
+            'player_only_enabled': _("Player only (hide episodes)"),
+        })
         return context
 
     def _extract_start_from(self, player_link: str) -> Optional[int]:
         """Extracts the 'start_from' parameter from a Kodik player URL if present."""
-        # ... (implementation remains the same)
         if not player_link: return None
         try:
             effective_link = player_link
@@ -126,7 +134,6 @@ class MediaItemDetailView(DetailView):
 
 class PlaySourceLinkView(DetailView):
     """ Renders a minimal HTML page containing only the player iframe. """
-    # ... (implementation remains the same)
     model = MediaSourceLink
     template_name = 'catalog/play_source_link.html'
     context_object_name = 'source_link'
@@ -136,8 +143,8 @@ class PlaySourceLinkView(DetailView):
         return MediaSourceLink.objects.select_related(
             'source',
             'translation',
-            'episode__season__media_item',
-            'media_item'
+            'episode__season__media_item', # Needed for getting media item pk if only episode is linked
+            'media_item' # Needed for getting media item pk if linked directly
         ).all()
 
     def get_context_data(self, **kwargs):
@@ -147,6 +154,7 @@ class PlaySourceLinkView(DetailView):
         start_from = self._extract_start_from(source_link_obj.player_link)
         player_url = source_link_obj.player_link
 
+        # Ensure start_from is appended if needed (logic remains the same)
         if start_from is not None and player_url:
             if f'start_from={start_from}' not in player_url:
                 try:
@@ -165,7 +173,6 @@ class PlaySourceLinkView(DetailView):
 
     def _extract_start_from(self, player_link: str) -> Optional[int]:
         """ Helper to extract start_from. """
-        # ... (implementation remains the same)
         if not player_link: return None
         try:
             effective_link = player_link
@@ -183,7 +190,6 @@ class PlaySourceLinkView(DetailView):
 
 class MediaItemSearchView(ListView):
     """ Displays search results for Media Items with advanced filtering. """
-    # ... (implementation remains the same)
     model = MediaItem
     template_name = 'catalog/mediaitem_search_results.html'
     context_object_name = 'search_results'
@@ -213,6 +219,7 @@ class MediaItemSearchView(ListView):
                 queryset = queryset.filter(genres__in=genres).distinct()
 
         else:
+            # If form is invalid (e.g., year_from > year_to), return empty
             if form.errors:
                 queryset = MediaItem.objects.none()
 
@@ -221,6 +228,8 @@ class MediaItemSearchView(ListView):
     def get_context_data(self, **kwargs):
         """ Adds the search form and query parameters to the context. """
         context = super().get_context_data(**kwargs)
+        # Pass the bound form to the template to display filter values
         context['search_form'] = AdvancedMediaSearchForm(self.request.GET or None)
+        # Keep original query parameters for pagination
         context['query_params'] = self.request.GET.urlencode()
         return context

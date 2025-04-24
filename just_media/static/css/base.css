@@ -51,13 +51,14 @@
 }
 
 
-/* --- List Layout Styling (Applied when .episodes-list-view is present) --- */
-.episodes-list-view .episodes-grid {
+/* --- List Layout Styling (Applied when .episodes-list-view is present on episodeListColumn) --- */
+/* Target the episodes-grid *within* the column that has .episodes-list-view */
+#episodes-container-column.episodes-list-view .episodes-grid {
     /* Remove default row behavior */
     display: block;
 }
 
-.episodes-list-view .episodes-grid .col {
+#episodes-container-column.episodes-list-view .episodes-grid .col {
     /* Override column behavior */
     width: 100%;
     flex: none;
@@ -65,7 +66,7 @@
     margin-bottom: 0.5rem; /* Space between list items */
 }
 
-.episodes-list-view .episode-selector {
+#episodes-container-column.episodes-list-view .episode-selector {
     /* Style as a list item */
     display: flex !important; /* Override card display */
     flex-direction: row !important;
@@ -77,12 +78,12 @@
     height: auto !important; /* Override card height */
 }
 
-.episodes-list-view .episode-selector.active {
+#episodes-container-column.episodes-list-view .episode-selector.active {
     /* Highlight remains similar, applied to the list item */
     background-color: rgba(var(--bs-primary-rgb), 0.1);
 }
 
-.episodes-list-view .episode-selector .card-img-top {
+#episodes-container-column.episodes-list-view .episode-selector .card-img-top {
     /* Small thumbnail on the left */
     flex: 0 0 90px; /* Fixed width for thumbnail */
     width: 90px;
@@ -94,7 +95,7 @@
     border: none; /* Remove border from grid style */
 }
 
-.episodes-list-view .episode-selector .card-body {
+#episodes-container-column.episodes-list-view .episode-selector .card-body {
     /* Text content takes remaining space */
     flex: 1 1 auto;
     padding: 0 !important; /* Remove card padding */
@@ -106,7 +107,7 @@
     white-space: nowrap; /* Keep text on one line */
 }
 
-.episodes-list-view .episode-selector .card-text {
+#episodes-container-column.episodes-list-view .episode-selector .card-text {
     margin: 0; /* Remove default margin */
 }
 
@@ -197,8 +198,10 @@
 }
 
 /* --- Helper class for scrolling episode list --- */
+/* Apply to the #episodes-container-column element */
 .episodes-sidebar-scroll {
-    max-height: calc(80vh - 100px); /* Example height, adjust as needed */
+    max-height: calc(80vh - 100px);
     overflow-y: auto;
-    padding-right: 0.5rem; /* Space for scrollbar */
+    /* Add some padding to prevent scrollbar overlap if needed */
+    /* padding-right: 5px; */
 }
