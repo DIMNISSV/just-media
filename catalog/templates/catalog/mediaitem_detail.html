@@ -11,7 +11,7 @@
             <div class="col-lg-3 col-md-4 mb-3 mb-md-0">
                 {% if media_item.poster_url %}
                     <img src="{{ media_item.poster_url }}"
-                         alt="{% blocktrans %}Poster for {{ title }}{% endblocktrans %}"
+                         alt="{% blocktrans with title=media_item.title %}Poster for {{ title }}{% endblocktrans %}"
                          class="img-fluid rounded shadow-sm mb-3">
                 {% else %}
                     <div class="img-fluid rounded shadow-sm mb-3 bg-secondary text-white d-flex align-items-center justify-content-center"
@@ -59,12 +59,10 @@
                     <div class="text-center text-muted border rounded p-5">{% trans "Select an episode below to start watching" %}</div>
                 </div>
 
-                {# --- Placeholder for Translation Selector --- #}
                 <div id="translation-selector-placeholder" class="mb-3">
                     {# <!-- Translation buttons will be injected here by JS --> #}
                 </div>
 
-                {# --- Season Tabs and Episodes --- #}
                 {% if media_item.seasons.exists %}
                     <h2>{% trans "Seasons and Episodes" %}</h2>
                     <ul class="nav nav-tabs mb-3" id="seasons-tab" role="tablist">
@@ -83,8 +81,8 @@
                         {% endfor %}
                     </ul>
 
+                    {# --- Added data-media-pk here --- #}
                     <div class="tab-content" id="seasons-tab-content" data-media-pk="{{ media_item.pk|unlocalize }}">
-                        {# <<< Added data-media-pk for JS #}
                         {% for season in media_item.seasons.all|dictsort:"season_number" %}
                             <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
                                  id="season-pane-{{ season.pk|unlocalize }}" role="tabpanel"
@@ -98,7 +96,6 @@
                                                     <a href="#"
                                                        class="episode-selector card h-100 text-decoration-none text-dark"
                                                        data-episode-pk="{{ episode.pk|unlocalize }}"
-                                                            {# --- REMOVED data-link-pk --- #}
                                                        data-episode-num="{{ episode.episode_number|unlocalize }}"
                                                        data-season-num="{{ season.season_number|unlocalize }}"
                                                        title="
@@ -152,7 +149,6 @@
 
     <template id="player-url-template" data-url="{% url 'catalog:play_source_link' pk=0 %}"></template>
 
-    {# Pass episode link data as JSON for JS #}
     <script id="episodes-links-data" type="application/json">{{ episodes_links_json|safe }}</script>
 
 {% endblock content %}
