@@ -43,14 +43,10 @@ class Source(models.Model):
         return self.name
 
 
-# --- NEW MODEL: Translation ---
 class Translation(models.Model):
     """ Represents a specific translation/voiceover studio from Kodik. """
     kodik_id = models.PositiveIntegerField(_("Kodik Translation ID"), unique=True, db_index=True)
     title = models.CharField(_("Title"), max_length=150, db_index=True)
-
-    # Optional: Add type ('voice' or 'subtitles') if consistently available and needed
-    # type = models.CharField(_("Type"), max_length=10, blank=True, null=True, choices=[('voice', 'Voice'), ('subtitles', 'Subtitles')])
 
     class Meta:
         verbose_name = _("Translation")
@@ -60,8 +56,6 @@ class Translation(models.Model):
     def __str__(self):
         return f"{self.title} (ID: {self.kodik_id})"
 
-
-# --- END NEW MODEL ---
 
 class MediaItem(models.Model):
     class MediaType(models.TextChoices):
@@ -178,23 +172,19 @@ class MediaSourceLink(models.Model):
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='links', verbose_name=_("Source"))
     player_link = models.URLField(_("Player Link"), max_length=2048)
 
-    # --- CHANGED: Use ForeignKey to Translation ---
     translation = models.ForeignKey(
         Translation,
-        on_delete=models.SET_NULL,  # Or models.PROTECT? Keep link even if translation removed?
+        on_delete=models.SET_NULL,
         related_name='links',
         verbose_name=_("Translation"),
-        blank=True, null=True  # Make nullable temporarily for migration
+        blank=True, null=True
     )
-    # --- REMOVED: translation_info ---
-    # translation_info = models.CharField(...)
 
     quality_info = models.CharField(_("Quality Info"), max_length=50, blank=True, null=True,
                                     help_text=_("Quality reported by the source (e.g., '720p', 'HDTVRip')"))
     source_specific_id = models.CharField(_("Source Specific ID"), max_length=100, blank=True, null=True, db_index=True,
                                           help_text=_(
                                               "ID of the content within the source system (e.g., 'movie-12345')"))
-    # Optional: Add field for cleanup logic
     last_seen_at = models.DateTimeField(_("Last Seen At"), blank=True, null=True, db_index=True)
 
     added_at = models.DateTimeField(_("Added At"), auto_now_add=True)
@@ -203,23 +193,17 @@ class MediaSourceLink(models.Model):
         verbose_name = _("Media Source Link")
         verbose_name_plural = _("Media Source Links")
         ordering = ['-added_at']
-        # Update unique constraints if needed, e.g., unique per episode/translation
         unique_together = [
-            # Can one episode have multiple Kodik links for the same translation (e.g. diff quality)?
-            # If not, this can be unique:
             ('episode', 'translation', 'source'),
-            # Same for links attached directly to media_item (movies)
-            ('media_item', 'episode', 'translation', 'source')  # Ensure episode is None for this case
+            ('media_item', 'episode', 'translation', 'source')
         ]
         constraints = [
-            # Ensure only one link per episode+translation+source (where media_item is null)
             models.UniqueConstraint(
                 fields=['episode', 'translation', 'source'],
                 name='unique_episode_translation_source_link',
                 condition=models.Q(media_item__isnull=True) & models.Q(episode__isnull=False) & models.Q(
                     translation__isnull=False)
             ),
-            # Ensure only one link per media_item+translation+source (where episode is null)
             models.UniqueConstraint(
                 fields=['media_item', 'translation', 'source'],
                 name='unique_mediaitem_translation_source_link',

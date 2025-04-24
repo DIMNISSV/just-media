@@ -1,13 +1,11 @@
 # catalog/management/commands/update_translations.py
 
 import logging
-# Note: We might not need the mapper here as we process structured data from /search results directly
-# from catalog.services.kodik_mapper import map_kodik_item_to_models
 from typing import Dict, Optional, Set
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Q, OuterRef, Subquery  # Import database functions
+from django.db.models import Q, OuterRef, Subquery
 from django.utils import timezone
 
 from catalog.models import (
@@ -34,7 +32,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--pk',
             type=int,
-            nargs='+',  # Allows multiple PKs: --pk 1 2 3
+            nargs='+', 
             help='Specify one or more MediaItem PKs to update.',
         )
         parser.add_argument(
@@ -57,8 +55,8 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--with-episodes-data',
-            action='store_true',  # Keep this flag to request screenshots etc.
-            default=True,  # Default to True as this command needs episode data
+            action='store_true', 
+            default=True, 
             help='Request detailed season and episode data (including screenshots) from Kodik /search.',
         )
         parser.add_argument(
@@ -105,9 +103,9 @@ class Command(BaseCommand):
         search_params = external_ids.copy()
         if with_episodes_data:
             search_params['with_episodes_data'] = 'true'
-            search_params['with_material_data'] = 'true'  # Often useful together
+            search_params['with_material_data'] = 'true' 
 
-        response_data = client.search_by_ids(**search_params, limit=100)  # Increase limit in case of many translations
+        response_data = client.search_by_ids(**search_params, limit=100) 
 
         if response_data is None or 'results' not in response_data:
             self._log(f"  Failed to fetch search results for Item {media_item.pk}. Check logs.", style=self.style.ERROR)
@@ -116,17 +114,14 @@ class Command(BaseCommand):
         search_results = response_data.get('results', [])
         if not search_results:
             self._log(f"  No search results (translations) found for Item {media_item.pk}.", verbosity=2)
-            # Optionally cleanup existing links if cleanup is enabled and no results found?
-            # Or keep them? Let's keep them for now.
-            return 1  # Count as processed (checked)
+            return 1
 
         self._log(f"  Found {len(search_results)} translation variants for Item {media_item.pk}.", verbosity=2)
 
-        processed_link_pks: Set[int] = set()  # Track Link PKs seen in this run for cleanup
-        check_start_time = timezone.now()  # Timestamp for cleanup
+        processed_link_pks: Set[int] = set()
+        check_start_time = timezone.now()
 
         for item_variant_data in search_results:
-            # Each item_variant_data represents one translation for the same MediaItem
             variant_translation_data = item_variant_data.get('translation')
             if not variant_translation_data or 'id' not in variant_translation_data:
                 logger.warning(
@@ -142,9 +137,9 @@ class Command(BaseCommand):
 
             variant_link = item_variant_data.get('link')
             variant_quality = item_variant_data.get('quality')
-            variant_source_specific_id = item_variant_data.get('id')  # e.g., movie-123 or serial-456
+            variant_source_specific_id = item_variant_data.get('id')
 
-            # Create/Update link for the main item
+           
             if variant_link:
                 link_defaults = {'player_link': variant_link, 'quality_info': variant_quality,
                                  'last_seen_at': check_start_time}
@@ -161,7 +156,7 @@ class Command(BaseCommand):
                     logger.error(
                         f"Error saving main link for Item {media_item.pk}, Translation {translation_obj.title}: {e}")
 
-            # Process Seasons and Episodes for this translation variant
+           
             api_seasons_data = item_variant_data.get('seasons', {})
             if api_seasons_data:
                 for season_num_str, season_content in api_seasons_data.items():
@@ -172,7 +167,7 @@ class Command(BaseCommand):
                     if season_number < -1: continue
 
                     episodes_list_data = season_content.get('episodes') if isinstance(season_content, dict) else None
-                    season_link = season_content.get('link')  # Link for the whole season
+                    season_link = season_content.get('link') 
 
                     try:
                         season, _ = Season.objects.get_or_create(media_item=media_item, season_number=season_number)
@@ -223,8 +218,6 @@ class Command(BaseCommand):
                                                     'last_seen_at': check_start_time}
                                 ep_link_lookup = {'source': kodik_source, 'media_item': None, 'episode': episode,
                                                   'translation': translation_obj}
-                                # Generate a specific ID if needed, or rely on unique constraint
-                                # ep_link_lookup['source_specific_id'] = f"{variant_source_specific_id}_s{season_number}_e{episode_number}"
                                 try:
                                     ep_link_obj, ep_created = MediaSourceLink.objects.update_or_create(
                                         defaults=ep_link_defaults, **ep_link_lookup)
@@ -241,26 +234,19 @@ class Command(BaseCommand):
                                     logger.error(
                                         f"Error saving episode link for {episode}, Translation {translation_obj.title}: {e}")
 
-        # --- Cleanup Stale Links ---
+       
         if cleanup:
             stale_links_qs = MediaSourceLink.objects.filter(
                 Q(episode__season__media_item=media_item) | Q(media_item=media_item, episode=None),
                 source=kodik_source
-            ).exclude(pk__in=processed_link_pks)  # Exclude links we just processed
-
-            # Alternative cleanup: by timestamp
-            # stale_links_qs = MediaSourceLink.objects.filter(
-            #     Q(episode__season__media_item=media_item) | Q(media_item=media_item, episode=None),
-            #     source=kodik_source,
-            #     Q(last_seen_at__lt=check_start_time) | Q(last_seen_at__isnull=True)
-            # )
+            ).exclude(pk__in=processed_link_pks) 
 
             deleted_count, _ = stale_links_qs.delete()
             if deleted_count > 0:
                 self._log(f"  Cleaned up {deleted_count} stale links for Item {media_item.pk}.",
                           style=self.style.WARNING)
 
-        return 1  # Processed successfully
+        return 1
 
     def handle(self, *args, **options):
         self.verbosity = options['verbosity']
@@ -286,7 +272,6 @@ class Command(BaseCommand):
         translation_map = self._get_translation_map()
         if not translation_map:
             self._log("Warning: Translation table is empty. Run 'populate_translations' first.", self.style.WARNING)
-            # Continue? Or raise error? Let's continue but links won't be saved properly.
 
         media_items_qs = MediaItem.objects.none()
         if pk_list:
@@ -299,7 +284,6 @@ class Command(BaseCommand):
             media_items_qs = MediaItem.objects.all()
             if skip_hours is not None:
                 skip_time = timezone.now() - timezone.timedelta(hours=skip_hours)
-                # Subquery to get the latest update time for the Kodik source for each item
                 latest_meta_update = MediaItemSourceMetadata.objects.filter(
                     media_item=OuterRef('pk'),
                     source=kodik_source
@@ -312,7 +296,7 @@ class Command(BaseCommand):
                 )
                 self._log(f"Processing items whose metadata was updated before {skip_time} or never.", verbosity=1)
 
-            media_items_qs = media_items_qs.order_by('?')  # Process in random order? Or by PK?
+            media_items_qs = media_items_qs.order_by('?')
             if limit:
                 media_items_qs = media_items_qs[:limit]
 

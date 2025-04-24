@@ -1,22 +1,14 @@
 {# templates/base.html #}
-{% extends "bootstrap5/base.html" %} {# <<< Наследуем от базового шаблона CMS #}
-{% load cms_tags menu_tags static i18n sekizai_tags %} {# Добавляем static #}
-{# --- CSS --- #}
+{% extends "bootstrap5/base.html" %}
+{% load cms_tags menu_tags static i18n sekizai_tags %}
 {% block base_css %}
-    {# Используем стандартный Bootstrap из родительского шаблона #}
     {{ block.super }}
-    {# Дополнительные/кастомные CSS можно добавить через Sekizai или здесь #}
-    {# Пример: <link rel="stylesheet" href="{% static 'css/custom_theme.css' %}"> #}
 {% endblock %}
 
-{# --- Navbar с переключателем темы --- #}
 {% block navbar %}
-    {# Классы navbar-dark bg-dark будут управляться через data-bs-theme #}
     <nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom" data-bs-theme="dark">
-        {# <<< Начинаем с темной для примера, JS установит правильную #}
         <div class="container">
             <a class="navbar-brand" href="/">{% block brand %}Just Media{% endblock %}</a>
-            {# <<< Добавим название сайта #}
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
                     data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
                     aria-expanded="false" aria-label="{% trans 'Toggle navigation' %}">
@@ -28,7 +20,7 @@
                     {% block menubar %}{% show_menu 0 100 100 100 'bootstrap5/menu.html' %}{% endblock %}
                 </ul>
 
-                {# Search bar placeholder (если понадобится) #}
+                {# Search bar placeholder #}
                 {% block searchbar %}{% endblock %}
 
                 {# --- Theme Switcher --- #}
@@ -40,7 +32,6 @@
                             <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/>
                         </svg>
                         <span class="d-none d-md-inline ms-1" id="theme-switcher-text"></span>
-                        {# Текст для больших экранов #}
                     </button>
                 </div>
                 {# --- End Theme Switcher --- #}
@@ -50,10 +41,6 @@
     </nav>
 {% endblock navbar %}
 
-{# --- Основной контент --- #}
-{# Блок content уже определен в djangocms_frontend.html, мы его используем в дочерних шаблонах #}
-
-{# --- JavaScript --- #}
 {% block base_js %}
     {{ block.super }}
     <script src="{% static 'js/theme_switcher.js' %}" defer></script>
