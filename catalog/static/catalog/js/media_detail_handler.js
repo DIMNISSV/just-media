@@ -15,9 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const episodesLinksDataElement = document.getElementById('episodes-links-data');
     const mainLinksDataElement = document.getElementById('main-links-data');
     const mediaPk = document.getElementById('seasons-tab-content')?.dataset.mediaPk;
-    const watchAreaRow = document.getElementById('watch-area-row');
-    const playerContainerColumn = document.getElementById('player-container-column');
-    const episodeListColumn = document.getElementById('episodes-container-column');
+    const watchAreaRow = document.getElementById('watch-area-row'); // Bootstrap row
+    const playerContainerColumn = document.getElementById('player-container-column'); // Player's column
+    const episodeListColumn = document.getElementById('episodes-container-column'); // Episodes' column
     const layoutRadios = document.querySelectorAll('input[name="playerLayout"]');
     const playerOnlyRadio = document.getElementById('layoutPlayerOnly');
     const playerOnlyLabel = document.querySelector('label[for="layoutPlayerOnly"]');
@@ -36,10 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const PLAYER_LAYOUT_KEY = `player_layout_preference`;
     const PLAYER_URL_TEMPLATE = playerUrlTemplateEl?.dataset.url;
     const LAYOUTS = ['episodes_below', 'episodes_right', 'player_only'];
-    const SCROLL_CLASS = 'episodes-sidebar-scroll';
+    const SCROLL_CLASS = 'episodes-sidebar-scroll'; // Applied to episodeListColumn
+    const LIST_VIEW_CLASS = 'episodes-list-view'; // Added to episodeListColumn for list styling
 
     // --- Utility Functions ---
-    function parseJsonData(element, description) { /* ... no changes ... */
+    function parseJsonData(element, description) {
         if (!element) {
             console.warn(`${description} data element not found.`);
             return {};
@@ -52,46 +53,60 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function generatePlayerUrl(linkPk) { /* ... no changes ... */
+    function generatePlayerUrl(linkPk) {
         if (!PLAYER_URL_TEMPLATE || !linkPk) return null;
-        return PLAYER_URL_TEMPLATE.replace(/catalog\/play\/\d+\//, `catalog/play/${linkPk}/`);
+        // Ensure we replace only the number part, keeping the base URL structure
+        return PLAYER_URL_TEMPLATE.replace(/(\/play\/)\d+(\/)/, `$1${linkPk}$2`);
     }
 
-    function getStartFromValue(linkData) { /* ... no changes ... */
+    function getStartFromValue(linkData) {
+        // Safely access start_from, defaulting to null
         return linkData?.start_from ?? null;
     }
 
     // --- Core Logic Functions ---
-    function loadPlayer(linkPk, translationIdToSave, startFrom = null) { /* ... no changes ... */
+    function loadPlayer(linkPk, translationIdToSave, startFrom = null) {
         const playerUrl = generatePlayerUrl(linkPk);
         console.log(`Attempting to load player for link PK: ${linkPk}, Translation ID: ${translationIdToSave}, URL: ${playerUrl}, StartFrom: ${startFrom}`);
         if (playerUrl && playerPlaceholder) {
+            // Use the potentially modified URL from the play_source_link view context
             playerPlaceholder.innerHTML = `<div class="player-container"><iframe src="${playerUrl}" allowfullscreen="allowfullscreen" webkitallowfullscreen="webkitallowfullscreen" mozallowfullscreen="mozallowfullscreen" loading="eager"></iframe></div>`;
+
+            // Save state to localStorage
             if (LAST_TRANSLATION_KEY && translationIdToSave) {
                 localStorage.setItem(LAST_TRANSLATION_KEY, translationIdToSave);
-                currentSelectedTranslationId = translationIdToSave.toString();
+                currentSelectedTranslationId = translationIdToSave.toString(); // Ensure string for comparison
                 console.log(`Saved last translation ID: ${currentSelectedTranslationId}`);
             }
-            if (currentEpisodeElement && LAST_EPISODE_KEY) {
+            // Save episode only if not in player_only mode OR if we are transitioning away from it
+            if (currentEpisodeElement && LAST_EPISODE_KEY && currentLayout !== 'player_only') {
                 const episodePk = currentEpisodeElement.dataset.episodePk;
                 localStorage.setItem(LAST_EPISODE_KEY, episodePk);
                 console.log(`Saved last episode PK: ${episodePk}`);
             } else if (!currentEpisodeElement && LAST_EPISODE_KEY && currentLayout === 'player_only') {
+                // Don't clear the last episode PK when entering player_only mode
                 console.log("In player_only mode, keeping last episode PK if previously set.");
             }
+
+            // Optional: Send message to loaded iframe if needed
+            const iframe = playerPlaceholder.querySelector('iframe');
+            if (iframe) {
+                iframe.onload = () => {
+                    try {
+                        const message = {type: 'playerInfo', startFrom: startFrom};
+                        iframe.contentWindow.postMessage(message, '*');
+                    } catch (e) {
+                        console.warn("Could not post message to iframe.", e);
+                    }
+                };
+            }
+
         } else {
             console.error('Could not generate player URL or player placeholder not found.');
             playerPlaceholder.innerHTML = '<p class="text-danger text-center p-5">{% trans "Error loading player." %}</p>';
         }
     }
 
-    /**
-     * Displays translation buttons based on available links for the current context.
-     * Updates the content of #translation-buttons-container and visibility of related elements.
-     * @param {string|null} episodePk - PK of the episode, or null if in 'player_only' layout.
-     * @param {string|null} preferredTranslationId - Kodik ID of the translation to pre-select.
-     * @returns {object|null} The link object of the translation to auto-load, or null.
-     */
     function displayTranslationOptions(episodePk, preferredTranslationId = null) {
         // Ensure the target containers exist
         if (!translationButtonsContainer || !translationLabel || !noTranslationsMessage) {
@@ -103,11 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
         let isMainLinkContext = (currentLayout === 'player_only');
 
         if (isMainLinkContext) {
+            // Use Object.values to get an array of link objects
             links = Object.values(mainLinksData);
-            links.sort((a, b) => a.translation_title.localeCompare(b.translation_title));
+            links.sort((a, b) => a.translation_title.localeCompare(b.translation_title)); // Sort by title
             console.log(`Displaying translations for MAIN ITEM using ${links.length} main links.`);
         } else if (episodePk && episodesLinksData[episodePk]) {
-            links = episodesLinksData[episodePk];
+            links = episodesLinksData[episodePk]; // Already an array
             console.log(`Displaying translations for EPISODE ${episodePk} using ${links.length} episode links.`);
         } else {
             console.log(`No links found for context. Layout: ${currentLayout}, Episode PK: ${episodePk}`);
@@ -124,10 +140,15 @@ document.addEventListener('DOMContentLoaded', () => {
             translationLabel.style.display = ''; // Show the static label
 
             let preferredLink = null;
-            if (preferredTranslationId) {
-                preferredLink = links.find(link => link.translation_id == preferredTranslationId);
-                console.log(`Preferred translation ID ${preferredTranslationId} found in links: ${!!preferredLink}`);
+            // Ensure preferredTranslationId is treated as a string for comparison
+            const preferredIdStr = preferredTranslationId?.toString();
+            if (preferredIdStr) {
+                // Compare string IDs
+                preferredLink = links.find(link => link.translation_id?.toString() === preferredIdStr);
+                console.log(`Preferred translation ID ${preferredIdStr} found in links: ${!!preferredLink}`);
             }
+
+            // Fallback to the first link if no preference matches
             translationLinkToAutoLoad = preferredLink || links[0];
             console.log(`Auto-loading translation: ${translationLinkToAutoLoad?.translation_title} (PK: ${translationLinkToAutoLoad?.link_pk})`);
 
@@ -137,35 +158,49 @@ document.addEventListener('DOMContentLoaded', () => {
                 const quality = link.quality ? ` (${link.quality})` : '';
                 const isSelected = translationLinkToAutoLoad && link.link_pk === translationLinkToAutoLoad.link_pk;
                 const btnClass = isSelected ? 'btn-primary active' : 'btn-outline-primary';
-                buttonsHtml += `<button class="btn btn-sm ${btnClass} me-1 mb-1 translation-btn" data-link-pk="${link.link_pk}" data-translation-id="${link.translation_id}" data-start-from="${link.start_from ?? ''}">${link.translation_title}${quality}</button>`;
+                const startFromAttr = link.start_from ? `data-start-from="${link.start_from}"` : '';
+                buttonsHtml += `<button class="btn btn-sm ${btnClass} me-1 mb-1 translation-btn"
+                                       data-link-pk="${link.link_pk}"
+                                       data-translation-id="${link.translation_id}"
+                                       ${startFromAttr}>
+                                    ${link.translation_title}${quality}
+                                </button>`;
             });
             translationButtonsContainer.innerHTML = buttonsHtml; // Set buttons HTML
-            return translationLinkToAutoLoad;
+
+            return translationLinkToAutoLoad; // Return the link object to be loaded
 
         } else {
             noTranslationsMessage.style.display = ''; // Show the 'no translations' message
+            // Clear the player if no translations are found
             if (playerPlaceholder) {
                 playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "No content available." %}</div>';
             }
-            return null;
+            return null; // Indicate no link to load
         }
     }
 
-    function highlightEpisode(episodeElement) { /* ... no changes ... */
-        document.querySelectorAll('#seasons-tab-content .episode-selector.border-primary').forEach(el => {
-            el.classList.remove('border', 'border-primary', 'border-3');
+    function highlightEpisode(episodeElement) {
+        // Remove highlight from all episode selectors first
+        document.querySelectorAll('#seasons-tab-content .episode-selector.active').forEach(el => {
+            el.classList.remove('active', 'border', 'border-primary', 'border-3'); // Ensure all related classes are removed
         });
+
         if (episodeElement) {
-            episodeElement.classList.add('border', 'border-primary', 'border-3');
-            currentEpisodeElement = episodeElement;
+            // Add highlight to the selected element
+            episodeElement.classList.add('active', 'border', 'border-primary', 'border-3');
+            currentEpisodeElement = episodeElement; // Update current element state
+
+            // Scroll into view if in sidebar mode
             if (episodeListColumn?.classList.contains(SCROLL_CLASS)) {
                 episodeElement.scrollIntoView({behavior: 'smooth', block: 'nearest'});
             }
         } else {
-            currentEpisodeElement = null;
+            currentEpisodeElement = null; // Clear current element state if null passed
         }
-        updateNavButtons();
+        updateNavButtons(); // Update prev/next buttons state
     }
+
 
     function highlightTranslationButton(buttonElement) {
         // Target buttons within the specific container now
@@ -179,104 +214,163 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function findEpisodeElementByPk(episodePk) { /* ... no changes ... */
+    function findEpisodeElementByPk(episodePk) {
         if (!episodesContainer || !episodePk) return null;
+        // Ensure we select within the correct container
         return episodesContainer.querySelector(`.episode-selector[data-episode-pk='${episodePk}']`);
     }
 
-    // --- Navigation and State Restoration ---
-    function findNextEpisodeElement(currentElement) { /* ... no changes ... */
+    function findNextEpisodeElement(currentElement) {
         if (!currentElement) return null;
-        const currentCol = currentElement.closest('.col');
-        if (!currentCol) return null;
-        let nextCol = currentCol.nextElementSibling;
+
+        const currentEpisodePk = currentElement.dataset.episodePk; // For logging
+        const parentCol = currentElement.closest('.col');
+        if (!parentCol) {
+            console.warn(`[findNext] Could not find parent .col for episode PK ${currentEpisodePk}`);
+            return null; // Should not happen with current HTML structure
+        }
+
+        let nextElement = null;
+        let nextCol = parentCol.nextElementSibling;
+
+        // Find the next sibling .col that contains an .episode-selector
         while (nextCol && !nextCol.querySelector('.episode-selector')) {
             nextCol = nextCol.nextElementSibling;
         }
-        if (nextCol?.querySelector('.episode-selector')) {
-            return nextCol.querySelector('.episode-selector');
-        }
-        const currentTabPane = currentElement.closest('.tab-pane');
-        if (!currentTabPane) return null;
-        const nextTabPane = currentTabPane.nextElementSibling;
-        if (nextTabPane?.classList.contains('tab-pane')) {
-            const nextTabButton = document.getElementById(nextTabPane.getAttribute('aria-labelledby'));
-            if (nextTabButton) {
-                try {
-                    new bootstrap.Tab(nextTabButton).show();
-                } catch (e) {
-                    console.error("Bootstrap tab error:", e)
+
+        if (nextCol) {
+            nextElement = nextCol.querySelector('.episode-selector');
+            console.log(`[findNext] Found next element PK ${nextElement?.dataset.episodePk} in next column.`);
+        } else {
+            console.log(`[findNext] No next sibling column found for episode PK ${currentEpisodePk}. Checking next season.`);
+            // If no next column found within the current season tab pane, check next tab
+            const currentTabPane = currentElement.closest('.tab-pane');
+            if (!currentTabPane) return null;
+            const nextTabPane = currentTabPane.nextElementSibling;
+
+            if (nextTabPane?.classList.contains('tab-pane')) {
+                // Activate the next season tab
+                const nextTabButton = document.getElementById(nextTabPane.getAttribute('aria-labelledby'));
+                if (nextTabButton) {
+                    try {
+                        new bootstrap.Tab(nextTabButton).show();
+                    } catch (e) {
+                        console.error("Bootstrap tab error:", e)
+                    }
                 }
+                // Find the first episode selector in the new tab pane
+                nextElement = nextTabPane.querySelector('.episode-selector');
+                console.log(`[findNext] Switched to next season tab. First episode: ${nextElement?.dataset.episodePk}`);
+            } else {
+                console.log("[findNext] No next season tab found.");
             }
-            return nextTabPane.querySelector('.episode-selector');
         }
-        return null;
+        return nextElement;
     }
 
-    function findPrevEpisodeElement(currentElement) { /* ... no changes ... */
+    function findPrevEpisodeElement(currentElement) {
         if (!currentElement) return null;
-        const currentCol = currentElement.closest('.col');
-        if (!currentCol) return null;
-        let prevCol = currentCol.previousElementSibling;
+
+        const currentEpisodePk = currentElement.dataset.episodePk; // For logging
+        const parentCol = currentElement.closest('.col');
+        if (!parentCol) {
+            console.warn(`[findPrev] Could not find parent .col for episode PK ${currentEpisodePk}`);
+            return null;
+        }
+
+        let prevElement = null;
+        let prevCol = parentCol.previousElementSibling;
+
+        // Find the previous sibling .col that contains an .episode-selector
         while (prevCol && !prevCol.querySelector('.episode-selector')) {
             prevCol = prevCol.previousElementSibling;
         }
-        if (prevCol?.querySelector('.episode-selector')) {
-            return prevCol.querySelector('.episode-selector');
-        }
-        const currentTabPane = currentElement.closest('.tab-pane');
-        if (!currentTabPane) return null;
-        const prevTabPane = currentTabPane.previousElementSibling;
-        if (prevTabPane?.classList.contains('tab-pane')) {
-            const prevTabButton = document.getElementById(prevTabPane.getAttribute('aria-labelledby'));
-            if (prevTabButton) {
-                try {
-                    new bootstrap.Tab(prevTabButton).show();
-                } catch (e) {
-                    console.error("Bootstrap tab error:", e)
+
+        if (prevCol) {
+            prevElement = prevCol.querySelector('.episode-selector');
+            console.log(`[findPrev] Found previous element PK ${prevElement?.dataset.episodePk} in previous column.`);
+        } else {
+            console.log(`[findPrev] No previous sibling column found for episode PK ${currentEpisodePk}. Checking previous season.`);
+            // If no previous column found within the current season tab pane, check previous tab
+            const currentTabPane = currentElement.closest('.tab-pane');
+            if (!currentTabPane) return null;
+            const prevTabPane = currentTabPane.previousElementSibling;
+
+            if (prevTabPane?.classList.contains('tab-pane')) {
+                // Activate the previous season tab
+                const prevTabButton = document.getElementById(prevTabPane.getAttribute('aria-labelledby'));
+                if (prevTabButton) {
+                    try {
+                        new bootstrap.Tab(prevTabButton).show();
+                    } catch (e) {
+                        console.error("Bootstrap tab error:", e)
+                    }
                 }
+                // Find the last episode selector in the new tab pane
+                const episodes = prevTabPane.querySelectorAll('.episode-selector');
+                prevElement = episodes.length > 0 ? episodes[episodes.length - 1] : null;
+                console.log(`[findPrev] Switched to previous season tab. Last episode: ${prevElement?.dataset.episodePk}`);
+            } else {
+                console.log("[findPrev] No previous season tab found.");
             }
-            const episodes = prevTabPane.querySelectorAll('.episode-selector');
-            return episodes.length > 0 ? episodes[episodes.length - 1] : null;
         }
-        return null;
+        return prevElement;
     }
 
-    function updateNavButtons() { /* ... no changes ... */
+
+    function updateNavButtons() {
         const nextElement = findNextEpisodeElement(currentEpisodeElement);
         const prevElement = findPrevEpisodeElement(currentEpisodeElement);
-        const navContainer = episodeListColumn?.querySelector('.d-flex.justify-content-between.align-items-center'); // Find container of nav buttons/title
+
+        // Show/hide the entire nav container based on player_only mode
+        const navContainer = episodeListColumn?.querySelector('.d-flex.justify-content-between.align-items-center');
         if (navContainer) {
-            navContainer.style.display = (currentLayout === 'player_only') ? 'none' : ''; // Hide container in player_only
+            navContainer.style.display = (currentLayout === 'player_only') ? 'none' : '';
         }
+
+        // Enable/disable buttons based on element existence and layout mode
         if (nextEpisodeBtn) nextEpisodeBtn.disabled = !nextElement || currentLayout === 'player_only';
         if (prevEpisodeBtn) prevEpisodeBtn.disabled = !prevElement || currentLayout === 'player_only';
     }
 
-    function handleEpisodeSelection(episodeElement, manuallyClicked = false) { /* ... no changes ... */
+
+    function handleEpisodeSelection(episodeElement, manuallyClicked = false) {
+        // Ignore if in player_only mode or element is invalid
         if (!episodeElement || currentLayout === 'player_only') {
             console.log("Episode selection ignored. Element:", episodeElement, "Layout:", currentLayout);
             return;
         }
+
         const episodePk = episodeElement.dataset.episodePk;
         console.log(`Handling episode selection for PK: ${episodePk}, Manual Click: ${manuallyClicked}`);
-        highlightEpisode(episodeElement);
+
+        highlightEpisode(episodeElement); // Highlight the selected episode visually
+
+        // Determine the translation to use: last stored, or current if nothing stored
         const preferredTranslationId = LAST_TRANSLATION_KEY ? localStorage.getItem(LAST_TRANSLATION_KEY) : currentSelectedTranslationId;
         console.log(`Preferred Translation ID for episode selection: ${preferredTranslationId}`);
+
+        // Update translation buttons and get the link to load
         const translationLinkToLoad = displayTranslationOptions(episodePk, preferredTranslationId);
+
         if (translationLinkToLoad) {
             const startFrom = getStartFromValue(translationLinkToLoad);
             loadPlayer(translationLinkToLoad.link_pk, translationLinkToLoad.translation_id.toString(), startFrom);
+
+            // Highlight the corresponding translation button
             const translationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${translationLinkToLoad.link_pk}']`);
-            highlightTranslationButton(translationButton); // Target container
+            highlightTranslationButton(translationButton);
         } else {
+            // If no translation link is found (e.g., episode has no sources)
             console.log(`No translation link to load for episode PK ${episodePk}`);
             if (playerPlaceholder) {
                 playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "No translations found for this episode." %}</div>';
             }
-            currentSelectedTranslationId = null;
-            highlightTranslationButton(null);
+            currentSelectedTranslationId = null; // Clear current selection state
+            highlightTranslationButton(null); // Clear button highlight
         }
+
+        // Switch to 'Watch' tab if the selection was manually triggered by the user
         const watchTabButton = document.getElementById('watch-tab');
         if (manuallyClicked && watchTabButton && !watchTabButton.classList.contains('active')) {
             try {
@@ -287,64 +381,88 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function restoreLastWatchedState() { /* ... no changes ... */
+
+    function restoreLastWatchedState() {
+        // Handle player_only mode first
         if (currentLayout === 'player_only') {
             console.log("Restore Watched State: In player_only layout.");
             const preferredTranslationId = LAST_TRANSLATION_KEY ? localStorage.getItem(LAST_TRANSLATION_KEY) : null;
+            // Display main links and get the one to load
             const mainTranslationLink = displayTranslationOptions(null, preferredTranslationId);
             if (mainTranslationLink) {
                 const startFrom = getStartFromValue(mainTranslationLink);
                 loadPlayer(mainTranslationLink.link_pk, mainTranslationLink.translation_id.toString(), startFrom);
+                // Highlight the corresponding button
                 const mainTranslationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${mainTranslationLink.link_pk}']`);
                 highlightTranslationButton(mainTranslationButton);
-            } // Target container
-            else {
+            } else {
+                // If no main links are available
                 if (playerPlaceholder) playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "Select a translation to start watching" %}</div>';
+                highlightTranslationButton(null); // Ensure no button is highlighted
             }
-            return;
+            return; // Exit early for player_only mode
         }
+
+        // Proceed for episode-based layouts
         console.log("Restore Watched State: Checking for last episode...");
         if (!LAST_EPISODE_KEY) {
             console.log("Restore Watched State: No episode key defined.");
             return;
         }
+
         const lastEpisodePk = localStorage.getItem(LAST_EPISODE_KEY);
         if (lastEpisodePk) {
             const lastEpisodeElement = findEpisodeElementByPk(lastEpisodePk);
             if (lastEpisodeElement) {
                 console.log(`Restore Watched State: Restoring last watched episode: PK ${lastEpisodePk}`);
+                // Find the season tab this episode belongs to
                 const targetTabPaneId = lastEpisodeElement.closest('.tab-pane')?.id;
                 const targetSeasonButton = targetTabPaneId ? document.querySelector(`button[data-bs-target='#${targetTabPaneId}']`) : null;
+
+                // If the correct season tab is not active, activate it first
                 if (targetSeasonButton && !targetSeasonButton.classList.contains('active')) {
+                    console.log(`Restore Watched State: Activating season tab for episode ${lastEpisodePk}`);
                     try {
-                        console.log(`Restore Watched State: Activating season tab for episode ${lastEpisodePk}`);
+                        // Use 'shown.bs.tab' event to ensure tab content is visible before selecting episode
                         targetSeasonButton.addEventListener('shown.bs.tab', () => {
                             console.log(`Restore Watched State: Tab shown for ${targetTabPaneId}, selecting episode.`);
-                            handleEpisodeSelection(lastEpisodeElement, false);
-                        }, {once: true});
-                        new bootstrap.Tab(targetSeasonButton).show();
+                            handleEpisodeSelection(lastEpisodeElement, false); // Select episode after tab is shown
+                        }, {once: true}); // Ensure listener runs only once
+                        new bootstrap.Tab(targetSeasonButton).show(); // Trigger tab change
                     } catch (e) {
                         console.error("Bootstrap tab error during restore:", e);
+                        // Fallback if tab switch fails
                         handleEpisodeSelection(lastEpisodeElement, false);
                     }
                 } else {
+                    // If the tab is already active or not found, just select the episode
                     console.log(`Restore Watched State: Correct tab already active or button not found, selecting episode.`);
                     handleEpisodeSelection(lastEpisodeElement, false);
                 }
             } else {
                 console.log(`Restore Watched State: Could not find last watched episode element (PK ${lastEpisodePk}) in DOM.`);
+                // Clear placeholder and translations if last episode not found
+                if (playerPlaceholder) playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "Select an episode to start watching" %}</div>';
+                displayTranslationOptions(null, null); // Clear translation buttons
+                highlightEpisode(null); // Clear episode highlight
             }
         } else {
             console.log("Restore Watched State: No last watched episode found in localStorage.");
+            // Clear placeholder and translations if no last episode stored
+            if (playerPlaceholder) playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "Select an episode to start watching" %}</div>';
+            displayTranslationOptions(null, null); // Clear translation buttons
+            highlightEpisode(null); // Clear episode highlight
         }
     }
 
-    function restoreLastDetailTab() { /* ... no changes ... */
+
+    function restoreLastDetailTab() {
         if (!LAST_DETAIL_TAB_KEY) return;
         const lastTabTarget = localStorage.getItem(LAST_DETAIL_TAB_KEY);
         const defaultTabSelector = '#details-pane';
         const targetSelector = lastTabTarget || defaultTabSelector;
         const tabButton = document.querySelector(`#detail-tabs button[data-bs-target="${targetSelector}"]`);
+
         if (tabButton && !tabButton.classList.contains('active')) {
             try {
                 console.log(`Restoring detail tab: ${targetSelector}`);
@@ -364,113 +482,144 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function applyLayoutPreference(layout, triggeredByInitialization = false) { /* ... no changes to main logic, only translation handling changed ... */
+
+    /**
+     * Applies the selected layout (episodes_below, episodes_right, player_only)
+     * by adjusting Bootstrap column classes and adding/removing helper classes.
+     * @param {string} layout - The desired layout ('episodes_below', 'episodes_right', 'player_only').
+     * @param {boolean} triggeredByInitialization - True if called during initial page load.
+     */
+    function applyLayoutPreference(layout, triggeredByInitialization = false) {
         console.log(`ApplyLayoutPreference called with layout: '${layout}', Initializing: ${triggeredByInitialization}`);
-        if (!playerContainerColumn || !episodeListColumn) {
-            console.error("Layout columns not found in DOM!");
+        if (!playerContainerColumn || !episodeListColumn || !watchAreaRow) {
+            console.error("Layout columns or row not found in DOM!");
             return;
         }
-        const chosenLayout = LAYOUTS.includes(layout) ? layout : 'episodes_below';
+
+        // --- Determine chosen layout ---
+        const chosenLayout = LAYOUTS.includes(layout) ? layout : 'episodes_below'; // Default to 'below'
         console.log(`Chosen layout: '${chosenLayout}'`);
+
+        // --- Avoid redundant application ---
         if (currentLayout === chosenLayout && !triggeredByInitialization) {
             console.log(`Layout '${chosenLayout}' is already active. Skipping redundant application.`);
             return;
         }
+
         const previousLayout = currentLayout;
-        currentLayout = chosenLayout;
-        let playerClasses = ['col-12'];
-        let episodeClasses = ['col-12'];
+        currentLayout = chosenLayout; // Update global state
+
+        // --- Define Bootstrap classes and helper flags based on layout ---
+        let playerColClasses = ['col-12']; // Default: Player takes full width
+        let episodeColClasses = ['col-12']; // Default: Episodes take full width below
         let episodeHidden = false;
-        let episodeMarginTop = true;
         let addScrollClass = false;
+        let addListViewClass = false;
+        let episodeMarginTop = 'mt-3'; // Default margin for 'below'
+
         switch (chosenLayout) {
             case 'episodes_right':
-                playerClasses = ['col-lg-8', 'col-md-12'];
-                episodeClasses = ['col-lg-4', 'col-md-12'];
-                episodeMarginTop = false;
-                addScrollClass = true;
+                playerColClasses = ['col-lg-9', 'col-md-12']; // Player: 9 cols on large, 12 on medium/small
+                episodeColClasses = ['col-lg-3', 'col-md-12']; // Episodes: 3 cols on large, 12 on medium/small
+                addScrollClass = true;     // Enable vertical scrolling for episode list
+                addListViewClass = true;   // Add class for list styling
+                episodeMarginTop = 'mt-3 mt-lg-0'; // Margin top on small screens, none on large
                 break;
             case 'player_only':
-                episodeHidden = true;
-                episodeMarginTop = false;
+                playerColClasses = ['col-12']; // Player takes full width
+                episodeHidden = true;      // Hide episode column entirely
+                episodeMarginTop = '';       // No margin needed if hidden
                 break;
             case 'episodes_below':
-            default:
-                episodeMarginTop = true;
+                // Defaults are already set (col-12 for both)
+                episodeMarginTop = 'mt-3'; // Standard margin when below
                 break;
         }
-        console.log(`Applying classes - Player: ${playerClasses.join(' ')}, Episodes: ${episodeClasses.join(' ')}, Hidden: ${episodeHidden}, MarginTop: ${episodeMarginTop}, Scroll: ${addScrollClass}`);
-        playerContainerColumn.className = 'col-12';
-        playerContainerColumn.classList.add(...playerClasses);
-        episodeListColumn.className = 'col-12';
-        episodeListColumn.classList.add(...episodeClasses);
+
+        console.log(`Applying classes - Player: ${playerColClasses.join(' ')}, Episodes: ${episodeColClasses.join(' ')}, Hidden: ${episodeHidden}, Scroll: ${addScrollClass}, ListView: ${addListViewClass}, MarginTop: '${episodeMarginTop}'`);
+
+        // --- Apply classes to columns ---
+        // Reset existing column classes first (optional but safer)
+        playerContainerColumn.className = ''; // Clear all classes
+        episodeListColumn.className = '';   // Clear all classes
+
+        // Add base 'col-12' and then specific layout classes
+        playerContainerColumn.classList.add('col-12', ...playerColClasses);
+        episodeListColumn.classList.add('col-12', ...episodeColClasses);
+
+        // --- Handle visibility and margins ---
         if (episodeHidden) {
             episodeListColumn.classList.add('d-none');
         } else {
             episodeListColumn.classList.remove('d-none');
-        }
-        if (episodeMarginTop) {
-            episodeListColumn.classList.add('mt-lg-0', 'mt-3');
-            if (chosenLayout === 'episodes_right') {
-                episodeListColumn.classList.remove('mt-3');
-                playerContainerColumn.classList.add('mb-3', 'mb-lg-0');
-            } else {
-                playerContainerColumn.classList.remove('mb-3', 'mb-lg-0');
+            // Apply margin top classes
+            if (episodeMarginTop) {
+                episodeMarginTop.split(' ').forEach(cls => episodeListColumn.classList.add(cls));
             }
-        } else {
-            episodeListColumn.classList.remove('mt-lg-0', 'mt-3');
-            playerContainerColumn.classList.remove('mb-3', 'mb-lg-0');
         }
+
+        // --- Apply helper classes ---
         if (addScrollClass) {
             episodeListColumn.classList.add(SCROLL_CLASS);
         } else {
             episodeListColumn.classList.remove(SCROLL_CLASS);
         }
+
+        if (addListViewClass) {
+            episodeListColumn.classList.add(LIST_VIEW_CLASS);
+        } else {
+            episodeListColumn.classList.remove(LIST_VIEW_CLASS);
+        }
+
+        // --- Persist preference and update UI ---
         localStorage.setItem(PLAYER_LAYOUT_KEY, chosenLayout);
         console.log(`Saved preference to localStorage: ${chosenLayout}`);
         layoutRadios.forEach(radio => {
             radio.checked = (radio.value === chosenLayout);
         });
-        updateNavButtons(); // Update before potential player load
+
+        updateNavButtons(); // Update prev/next buttons based on new layout
+
+        // --- Handle transitions between layouts ---
         if (previousLayout !== chosenLayout) {
             console.log(`Layout changed from '${previousLayout}' to '${chosenLayout}'`);
             if (chosenLayout === 'player_only') {
                 console.log("Transitioning to player_only mode...");
-                highlightEpisode(null);
+                highlightEpisode(null); // Deselect any episode
                 const preferredTranslationId = currentSelectedTranslationId || (LAST_TRANSLATION_KEY ? localStorage.getItem(LAST_TRANSLATION_KEY) : null);
-                const mainTranslationLink = displayTranslationOptions(null, preferredTranslationId); // This will update buttons in the container
+                const mainTranslationLink = displayTranslationOptions(null, preferredTranslationId); // Show main translations
                 if (mainTranslationLink) {
                     const startFrom = getStartFromValue(mainTranslationLink);
                     loadPlayer(mainTranslationLink.link_pk, mainTranslationLink.translation_id.toString(), startFrom);
                     const mainTranslationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${mainTranslationLink.link_pk}']`);
                     highlightTranslationButton(mainTranslationButton);
-                } // Target container
-                else {
+                } else { // If no main links found
                     if (playerPlaceholder) playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "Select a translation to start watching" %}</div>';
                     highlightTranslationButton(null);
                 }
             } else if (previousLayout === 'player_only') {
                 console.log("Transitioning from player_only mode...");
+                // Try to restore the last watched episode
                 const lastEpisodePk = LAST_EPISODE_KEY ? localStorage.getItem(LAST_EPISODE_KEY) : null;
                 const lastEpisodeElement = lastEpisodePk ? findEpisodeElementByPk(lastEpisodePk) : null;
                 if (lastEpisodeElement) {
-                    handleEpisodeSelection(lastEpisodeElement, false);
-                } // This calls displayTranslationOptions for the episode
-                else {
+                    handleEpisodeSelection(lastEpisodeElement, false); // Reloads player & translations for the episode
+                } else { // If no episode was previously watched or found
                     if (playerPlaceholder) playerPlaceholder.innerHTML = '<div class="text-center text-muted border rounded p-5">{% trans "Select an episode to start watching" %}</div>';
-                    if (translationButtonsContainer) translationButtonsContainer.innerHTML = '';
-                    if (translationLabel) translationLabel.style.display = 'none';
-                    if (noTranslationsMessage) noTranslationsMessage.style.display = 'none';
+                    displayTranslationOptions(null, null); // Clear translations
                     highlightEpisode(null);
                     highlightTranslationButton(null);
                 }
             } else {
+                // Transition between 'below' and 'right' - usually no player reload needed
+                // Ensure episode highlight is maintained if an episode was selected
                 if (currentEpisodeElement) {
-                    highlightEpisode(currentEpisodeElement);
-                } else { /* Maybe load first episode or clear translations? Let's clear */
-                    if (translationButtonsContainer) translationButtonsContainer.innerHTML = '';
-                    if (translationLabel) translationLabel.style.display = 'none';
-                    if (noTranslationsMessage) noTranslationsMessage.style.display = 'none';
+                    highlightEpisode(currentEpisodeElement); // Re-apply highlight (might be needed if classes changed)
+                    // Re-display translations for the current episode if needed? Generally not required unless DOM changed drastically.
+                    // displayTranslationOptions(currentEpisodeElement.dataset.episodePk, currentSelectedTranslationId);
+                } else {
+                    // If no episode is selected, clear translations
+                    displayTranslationOptions(null, null);
                 }
             }
         } else {
@@ -478,44 +627,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function initializeLayout() { /* ... no changes ... */
+
+    function initializeLayout() {
         console.log("Initializing layout...");
         const storedLayout = localStorage.getItem(PLAYER_LAYOUT_KEY);
         console.log("Stored layout from localStorage:", storedLayout);
-        let layoutToApply = storedLayout || 'episodes_below';
+        let layoutToApply = storedLayout || 'episodes_below'; // Default
+
+        // Check if player_only option is disabled, and default to 'below' if it is
         if (layoutToApply === 'player_only' && playerOnlyRadio?.disabled) {
             layoutToApply = 'episodes_below';
             console.log("Player_only layout disabled, falling back to episodes_below for initialization.");
         }
         console.log("Layout to apply on initialization:", layoutToApply);
-        applyLayoutPreference(layoutToApply, true);
+        applyLayoutPreference(layoutToApply, true); // Apply layout, marking as initialization
     }
 
-    function checkPlayerOnlyAvailability() { /* ... no changes ... */
+
+    function checkPlayerOnlyAvailability() {
+        // Check if the mainLinksData object has any keys
         const hasMainLinks = Object.keys(mainLinksData).length > 0;
         if (!hasMainLinks && playerOnlyRadio && playerOnlyLabel) {
             console.log("Disabling player_only layout option: No main links found.");
             playerOnlyRadio.disabled = true;
             playerOnlyLabel.classList.add('disabled', 'opacity-50');
-            playerOnlyLabel.title = '{% trans "Player only option unavailable (no main item link found)" %}';
-        } else if (playerOnlyRadio) {
+            // Use JS to set the title for disabled state
+            playerOnlyLabel.setAttribute('title', '{% trans "Player only option unavailable (no main item link found)" %}');
+            // Optionally re-enable tooltips if using Bootstrap's JS tooltips
+            // const tooltipInstance = bootstrap.Tooltip.getInstance(playerOnlyLabel);
+            // if (tooltipInstance) { tooltipInstance.setContent({ '.tooltip-inner': 'New Title' }); }
+        } else if (playerOnlyRadio && playerOnlyLabel) {
+            // Ensure it's enabled if links exist
             playerOnlyRadio.disabled = false;
-            playerOnlyLabel?.classList.remove('disabled', 'opacity-50');
-            playerOnlyLabel.title = '{% trans "Player only (hide episodes)" %}';
+            playerOnlyLabel.classList.remove('disabled', 'opacity-50');
+            playerOnlyLabel.setAttribute('title', '{% trans "Player only (hide episodes)" %}');
+            // Update tooltip content if necessary
         }
     }
 
+
     // --- Event Listeners ---
     if (episodesContainer) {
+        // Use event delegation on the container for episode clicks
         episodesContainer.addEventListener('click', (event) => {
             const episodeCard = event.target.closest('.episode-selector');
+            // Process click only if not in player_only mode
             if (episodeCard && currentLayout !== 'player_only') {
                 event.preventDefault();
-                handleEpisodeSelection(episodeCard, true);
+                handleEpisodeSelection(episodeCard, true); // Mark as manual click
             }
         });
     }
-    // UPDATED: Target the buttons container for delegation
+
+    // Use event delegation on the buttons container for translation clicks
     if (translationButtonsContainer) {
         translationButtonsContainer.addEventListener('click', (event) => {
             const translationButton = event.target.closest('.translation-btn');
@@ -523,18 +687,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 event.preventDefault();
                 const linkPk = translationButton.dataset.linkPk;
                 const translationId = translationButton.dataset.translationId;
-                const startFrom = parseInt(translationButton.dataset.startFrom) || null;
+                // Get start_from attribute, default to null if missing or invalid
+                const startFrom = parseInt(translationButton.dataset.startFrom, 10) || null;
+
                 if (linkPk && translationId) {
-                    highlightTranslationButton(translationButton);
-                    loadPlayer(linkPk, translationId, startFrom);
+                    highlightTranslationButton(translationButton); // Highlight clicked button
+                    loadPlayer(linkPk, translationId, startFrom); // Load player with link PK, translation ID, and start time
                 } else {
                     console.error("Translation button clicked but no link PK or translation ID found.");
                 }
             }
         });
     }
+
     if (nextEpisodeBtn) {
         nextEpisodeBtn.addEventListener('click', () => {
+            // Allow action only if not in player_only mode
             if (currentLayout !== 'player_only') {
                 const nextElement = findNextEpisodeElement(currentEpisodeElement);
                 if (nextElement) {
@@ -543,8 +711,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
     if (prevEpisodeBtn) {
         prevEpisodeBtn.addEventListener('click', () => {
+            // Allow action only if not in player_only mode
             if (currentLayout !== 'player_only') {
                 const prevElement = findPrevEpisodeElement(currentEpisodeElement);
                 if (prevElement) {
@@ -553,6 +723,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Listener for main detail tabs ('Details', 'Watch')
     const detailTabs = document.querySelectorAll('#detail-tabs button[data-bs-toggle="tab"]');
     detailTabs.forEach(tabButton => {
         tabButton.addEventListener('shown.bs.tab', event => {
@@ -565,11 +737,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Listener for player layout radio buttons
     layoutRadios.forEach(radio => {
         radio.addEventListener('change', (event) => {
             console.log(`Layout radio changed: ID='${event.target.id}', Value='${event.target.value}', Checked=${event.target.checked}`);
             if (event.target.checked) {
-                applyLayoutPreference(event.target.value, false);
+                applyLayoutPreference(event.target.value, false); // Apply selected layout, not initialization
             }
         });
     });
@@ -578,13 +752,14 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Media detail handler initializing...");
     episodesLinksData = parseJsonData(episodesLinksDataElement, 'Episodes links');
     mainLinksData = parseJsonData(mainLinksDataElement, 'Main links');
-    checkPlayerOnlyAvailability();
-    initializeLayout();
-    restoreLastDetailTab();
+    checkPlayerOnlyAvailability(); // Check if main links exist to enable/disable option
+    initializeLayout();           // Apply the stored or default layout
+    restoreLastDetailTab();       // Activate the last used detail tab
+    // Delay state restoration slightly to ensure layout/tabs are settled
     setTimeout(() => {
-        restoreLastWatchedState();
-    }, 50);
-    updateNavButtons(); // Update nav buttons visibility based on initial layout
+        restoreLastWatchedState();    // Load last watched episode/translation based on layout
+    }, 50); // 50ms delay, adjust if needed
+    updateNavButtons(); // Update prev/next buttons visibility based on initial layout
     console.log("Media detail handler initialization complete.");
 
 }); // End DOMContentLoaded

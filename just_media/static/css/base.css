@@ -1,26 +1,117 @@
 /* static/css/base.css */
-.episode-selector.border-primary {
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5);
-    transform: scale(1.03);
-    transition: transform 0.1s ease-in-out;
-    border-width: 2px !important;
+
+/* --- General Episode Selector Styling --- */
+.episode-selector {
+    transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+    cursor: pointer;
 }
 
-.episode-selector .card-img-top {
+.episode-selector:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+}
+
+/* Highlight for the currently selected/active episode */
+.episode-selector.active {
+    border-color: var(--bs-primary) !important; /* Use Bootstrap primary color */
+    border-width: 2px !important;
+    box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.35); /* Adjusted shadow */
+    transform: scale(1.01); /* Slight scale for active */
+}
+
+/* --- Grid Layout Styling (Default: episodes_below) --- */
+/* Card image for grid layout */
+.episodes-grid .episode-selector .card-img-top {
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    background-color: #e9ecef;
+    background-color: #e9ecef; /* Placeholder color */
+    border-bottom: 1px solid var(--bs-border-color); /* Separator */
 }
 
-.episode-selector .card-img-top small {
+.episodes-grid .episode-selector .card-img-top small {
     font-size: 0.8rem;
 }
 
-.episode-selector .card-body {
+/* Card body for grid layout */
+.episodes-grid .episode-selector .card-body {
     padding: 0.5rem;
     font-size: 0.85rem;
+    text-align: center;
+    flex-grow: 1; /* Allow body to grow */
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Center text vertically */
 }
 
+/* Card structure for grid layout */
+.episodes-grid .episode-selector.card {
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Ensure cards fill column height */
+}
+
+
+/* --- List Layout Styling (Applied when .episodes-list-view is present) --- */
+.episodes-list-view .episodes-grid {
+    /* Remove default row behavior */
+    display: block;
+}
+
+.episodes-list-view .episodes-grid .col {
+    /* Override column behavior */
+    width: 100%;
+    flex: none;
+    padding: 0 !important; /* Remove column padding */
+    margin-bottom: 0.5rem; /* Space between list items */
+}
+
+.episodes-list-view .episode-selector {
+    /* Style as a list item */
+    display: flex !important; /* Override card display */
+    flex-direction: row !important;
+    align-items: center;
+    padding: 0.4rem 0.5rem; /* Padding for list item */
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-card-border-radius);
+    background-color: var(--bs-body-bg); /* Or card background */
+    height: auto !important; /* Override card height */
+}
+
+.episodes-list-view .episode-selector.active {
+    /* Highlight remains similar, applied to the list item */
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.episodes-list-view .episode-selector .card-img-top {
+    /* Small thumbnail on the left */
+    flex: 0 0 90px; /* Fixed width for thumbnail */
+    width: 90px;
+    height: 50px; /* Fixed height */
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    margin-right: 0.75rem;
+    border-radius: var(--bs-border-radius-sm);
+    border: none; /* Remove border from grid style */
+}
+
+.episodes-list-view .episode-selector .card-body {
+    /* Text content takes remaining space */
+    flex: 1 1 auto;
+    padding: 0 !important; /* Remove card padding */
+    text-align: left !important; /* Align text left */
+    font-size: 0.8rem;
+    /* Ensure text doesn't overflow */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap; /* Keep text on one line */
+}
+
+.episodes-list-view .episode-selector .card-text {
+    margin: 0; /* Remove default margin */
+}
+
+
+/* --- Translation Selector --- */
 #translation-selector-placeholder .translation-btn {
     font-size: 0.8rem;
     padding: 0.2rem 0.5rem;
@@ -30,15 +121,8 @@
     font-weight: bold;
 }
 
-.episodes-grid .card {
-    display: flex;
-    flex-direction: column;
-}
 
-.episodes-grid .card-body {
-    flex-grow: 1;
-}
-
+/* --- Player Placeholder --- */
 #player-placeholder .border {
     border-style: dashed !important;
 }
@@ -64,6 +148,7 @@
 }
 
 
+/* --- Tabs Styling --- */
 .nav-tabs .nav-link {
     margin-bottom: -1px;
 }
@@ -73,12 +158,12 @@
     font-size: 0.85rem;
 }
 
-/* Smaller tabs */
-
+/* --- General Placeholders --- */
 #translation-selector-placeholder {
-    min-height: 2.5rem;
+    min-height: 2.5rem; /* Ensure space for buttons */
 }
 
+/* --- Media List Card (Index/Search Pages) --- */
 .media-list-card .card-img-top {
     aspect-ratio: 2 / 3;
     object-fit: cover;
@@ -111,34 +196,9 @@
     border-top: none;
 }
 
-/* --- Player Layout Styles --- */
-
-/* REMOVED ALL layout-* rules */
-
-/* Helper class for scrolling episode list when in sidebar mode */
+/* --- Helper class for scrolling episode list --- */
 .episodes-sidebar-scroll {
     max-height: calc(80vh - 100px); /* Example height, adjust as needed */
     overflow-y: auto;
     padding-right: 0.5rem; /* Space for scrollbar */
-    /* Add border or background for visual separation if desired */
-    /* border-left: 1px solid var(--bs-border-color); */
-    /* padding-left: 1rem; */
-}
-
-/* Optional: Adjust episode grid appearance when in sidebar */
-.episodes-sidebar-scroll .episodes-grid {
-    /* Example: Make cards smaller */
-    --bs-gutter-x: 0.5rem;
-    --bs-gutter-y: 0.5rem;
-    /* Using row-cols-* in HTML is usually better for responsiveness */
-}
-
-/* Make cards smaller in sidebar */
-.episodes-sidebar-scroll .episodes-grid .episode-selector .card-body {
-    font-size: 0.75rem;
-    padding: 0.3rem;
-}
-.episodes-sidebar-scroll .episodes-grid .episode-selector .card-img-top {
-    min-height: 60px;
-    aspect-ratio: 16 / 9;
 }
