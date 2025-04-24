@@ -2,8 +2,9 @@
 import json
 from django.views.generic import ListView, DetailView
 from django.utils.translation import gettext_lazy as _
-from django.db.models import Q  # Import Q for search
+from django.db.models import Q
 from .models import MediaItem, MediaSourceLink, Screenshot
+from .forms import AdvancedMediaSearchForm  # Import the new form
 
 
 class MediaItemListView(ListView):
@@ -14,12 +15,8 @@ class MediaItemListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        """Prefetches related data and applies basic filtering if needed."""
+        """Prefetches related data."""
         queryset = MediaItem.objects.prefetch_related('genres', 'countries').order_by('-updated_at', 'title')
-        # Example of filtering based on GET param (can be moved to SearchView later)
-        # query = self.request.GET.get('q')
-        # if query:
-        #     queryset = queryset.filter(title__icontains=query)
         return queryset
 
 
@@ -90,27 +87,51 @@ class PlaySourceLinkView(DetailView):
 
 
 class MediaItemSearchView(ListView):
-    """ Displays search results for Media Items. """
+    """ Displays search results for Media Items with advanced filtering. """
     model = MediaItem
     template_name = 'catalog/mediaitem_search_results.html'
     context_object_name = 'search_results'
     paginate_by = 20
 
     def get_queryset(self):
-        """ Filters the queryset based on the 'q' GET parameter. """
-        query = self.request.GET.get('q', '').strip()
-        queryset = MediaItem.objects.none()
+        """ Filters the queryset based on GET parameters using the form. """
+        queryset = MediaItem.objects.prefetch_related('genres', 'countries').order_by('-updated_at', 'title')
+        form = AdvancedMediaSearchForm(self.request.GET)
 
-        if query:
-            # Search in title and original title
-            queryset = MediaItem.objects.filter(
-                Q(title__icontains=query) | Q(original_title__icontains=query)
-            ).prefetch_related('genres', 'countries').order_by('-updated_at', 'title')  # Same prefetch/order as list
+        if form.is_valid():
+            query = form.cleaned_data.get('q')
+            year_from = form.cleaned_data.get('year_from')
+            year_to = form.cleaned_data.get('year_to')
+            media_type = form.cleaned_data.get('media_type')
+            genres = form.cleaned_data.get('genres')
+
+            if query:
+                queryset = queryset.filter(Q(title__icontains=query) | Q(original_title__icontains=query))
+            if year_from:
+                queryset = queryset.filter(release_year__gte=year_from)
+            if year_to:
+                queryset = queryset.filter(release_year__lte=year_to)
+            if media_type:
+                queryset = queryset.filter(media_type=media_type)
+            if genres:
+                # Filter by items that have ALL selected genres? Or ANY? Let's use ANY for now.
+                # For ALL: iterate and chain filter calls:
+                # for genre in genres:
+                #     queryset = queryset.filter(genres=genre)
+                # For ANY:
+                queryset = queryset.filter(genres__in=genres).distinct()  # Use distinct with M2M filter
+
+        else:
+            # If form is invalid (shouldn't happen with GET unless tampered), return empty
+            queryset = MediaItem.objects.none()
 
         return queryset
 
     def get_context_data(self, **kwargs):
-        """ Adds the search query to the context. """
+        """ Adds the search form and query parameters to the context. """
         context = super().get_context_data(**kwargs)
-        context['search_query'] = self.request.GET.get('q', '').strip()
+        # Pass the bound form to the template to display filter values
+        context['search_form'] = AdvancedMediaSearchForm(self.request.GET or None)
+        # Keep original query parameters for pagination
+        context['query_params'] = self.request.GET.urlencode()
         return context
