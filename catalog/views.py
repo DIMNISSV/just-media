@@ -41,13 +41,15 @@ class MediaItemDetailView(DetailView):
         episodes_data = {}
 
         if hasattr(media_item, 'seasons'):
-            for season in media_item.seasons.all():
+            seasons = media_item.seasons.all()
+            for season in seasons:
                 if hasattr(season, 'episodes'):
-                    for episode in season.episodes.all():
+                    episodes = season.episodes.all()
+                    for episode in episodes:
                         episode_links = []
                         if hasattr(episode, 'source_links'):
-                            for link in episode.source_links.all():
-
+                            links = episode.source_links.all()
+                            for link in links:
                                 if link.translation:
                                     episode_links.append({
                                         'translation_id': link.translation.kodik_id,
@@ -55,6 +57,7 @@ class MediaItemDetailView(DetailView):
                                         'link_pk': link.pk,
                                         'quality': link.quality_info
                                     })
+
                         episode_links.sort(key=lambda x: x['translation_title'])
                         episodes_data[episode.pk] = episode_links
 
@@ -62,20 +65,20 @@ class MediaItemDetailView(DetailView):
         return context
 
 
+# --- UPDATED PlaySourceLinkView ---
 class PlaySourceLinkView(DetailView):
-    """ Displays the player iframe for a specific MediaSourceLink. """
+    """ Renders a minimal HTML page containing only the player iframe. """
     model = MediaSourceLink
     template_name = 'catalog/play_source_link.html'
     context_object_name = 'source_link'
 
     def get_queryset(self):
-        """Selects related data needed *within* the simplified player page."""
-        return MediaSourceLink.objects.select_related(
-            'source',
-            'translation'
-        ).all()
+        """ No complex related data needed for the simplified template. """
+
+        return MediaSourceLink.objects.all()
 
     def get_context_data(self, **kwargs):
-        """Provides minimal context needed for the iframe source page."""
+        """ No extra context needed for the simplified template. """
         context = super().get_context_data(**kwargs)
+
         return context
