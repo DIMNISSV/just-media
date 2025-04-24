@@ -1,4 +1,6 @@
 # catalog/views.py
+import json
+
 from django.views.generic import ListView, DetailView
 
 from .models import MediaItem, MediaSourceLink
@@ -22,13 +24,42 @@ class MediaItemDetailView(DetailView):
     context_object_name = 'media_item'
 
     def get_queryset(self):
+        """Prefetches all necessary related data for the detail view."""
         return MediaItem.objects.prefetch_related(
             'genres',
             'countries',
             'source_metadata__source',
             'seasons__episodes__screenshots',
+            'seasons__episodes__source_links__translation',
             'seasons__episodes__source_links__source'
         ).all()
+
+    def get_context_data(self, **kwargs):
+        """Adds structured episode and translation data to the context."""
+        context = super().get_context_data(**kwargs)
+        media_item = context['media_item']
+        episodes_data = {}
+
+        if hasattr(media_item, 'seasons'):
+            for season in media_item.seasons.all():
+                if hasattr(season, 'episodes'):
+                    for episode in season.episodes.all():
+                        episode_links = []
+                        if hasattr(episode, 'source_links'):
+                            for link in episode.source_links.all():
+
+                                if link.translation:
+                                    episode_links.append({
+                                        'translation_id': link.translation.kodik_id,
+                                        'translation_title': link.translation.title,
+                                        'link_pk': link.pk,
+                                        'quality': link.quality_info
+                                    })
+                        episode_links.sort(key=lambda x: x['translation_title'])
+                        episodes_data[episode.pk] = episode_links
+
+        context['episodes_links_json'] = json.dumps(episodes_data)
+        return context
 
 
 class PlaySourceLinkView(DetailView):
@@ -38,26 +69,13 @@ class PlaySourceLinkView(DetailView):
     context_object_name = 'source_link'
 
     def get_queryset(self):
-
+        """Selects related data needed *within* the simplified player page."""
         return MediaSourceLink.objects.select_related(
             'source',
-            'media_item',
-            'episode__season__media_item'
+            'translation'
         ).all()
 
     def get_context_data(self, **kwargs):
+        """Provides minimal context needed for the iframe source page."""
         context = super().get_context_data(**kwargs)
-        source_link = context['source_link']
-        if source_link.episode:
-            context['media_title'] = source_link.episode.season.media_item.title
-            context['episode_str'] = f"S{source_link.episode.season.season_number}E{source_link.episode.episode_number}"
-            context[
-                'back_url'] = source_link.episode.season.media_item.get_absolute_url()
-        elif source_link.media_item:
-            context['media_title'] = source_link.media_item.title
-            context['back_url'] = source_link.media_item.get_absolute_url()
-        else:
-            context['media_title'] = "Unknown Media"
-            context['back_url'] = "/"
-
         return context
