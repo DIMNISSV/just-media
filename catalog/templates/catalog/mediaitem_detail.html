@@ -226,8 +226,7 @@
                                 {% endfor %}
                             </div>
                         {% else %}
-                            {% comment %} Check media type using comma-separated string for 'in' operator {% endcomment %}
-                            {% if media_item.media_type in "tv_show,anime_series,cartoon_series,documentary_series"|split:',' %}
+                            {% if media_item.media_type == 'tv_show' or media_item.media_type == 'anime_series' or media_item.media_type == 'cartoon_series' or media_item.media_type == 'documentary_series' %}
                                 <p class="text-muted">{% trans "Episode list is not available yet." %}</p>
                             {% else %}
                                 <p class="text-muted">{% trans "This is a single feature." %}</p>
