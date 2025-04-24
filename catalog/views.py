@@ -1,9 +1,9 @@
 # catalog/views.py
 import json
-
 from django.views.generic import ListView, DetailView
-
-from .models import MediaItem, MediaSourceLink
+from django.utils.translation import gettext_lazy as _
+from django.db.models import Q  # Import Q for search
+from .models import MediaItem, MediaSourceLink, Screenshot
 
 
 class MediaItemListView(ListView):
@@ -14,8 +14,13 @@ class MediaItemListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        """Prefetches related data for list optimization."""
-        return MediaItem.objects.prefetch_related('genres', 'countries').order_by('-updated_at', 'title')
+        """Prefetches related data and applies basic filtering if needed."""
+        queryset = MediaItem.objects.prefetch_related('genres', 'countries').order_by('-updated_at', 'title')
+        # Example of filtering based on GET param (can be moved to SearchView later)
+        # query = self.request.GET.get('q')
+        # if query:
+        #     queryset = queryset.filter(title__icontains=query)
+        return queryset
 
 
 class MediaItemDetailView(DetailView):
@@ -81,4 +86,31 @@ class PlaySourceLinkView(DetailView):
     def get_context_data(self, **kwargs):
         """Provides minimal context needed for the iframe source page."""
         context = super().get_context_data(**kwargs)
+        return context
+
+
+class MediaItemSearchView(ListView):
+    """ Displays search results for Media Items. """
+    model = MediaItem
+    template_name = 'catalog/mediaitem_search_results.html'
+    context_object_name = 'search_results'
+    paginate_by = 20
+
+    def get_queryset(self):
+        """ Filters the queryset based on the 'q' GET parameter. """
+        query = self.request.GET.get('q', '').strip()
+        queryset = MediaItem.objects.none()
+
+        if query:
+            # Search in title and original title
+            queryset = MediaItem.objects.filter(
+                Q(title__icontains=query) | Q(original_title__icontains=query)
+            ).prefetch_related('genres', 'countries').order_by('-updated_at', 'title')  # Same prefetch/order as list
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        """ Adds the search query to the context. """
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('q', '').strip()
         return context

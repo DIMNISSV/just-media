@@ -1,71 +1,99 @@
 /* static/css/base.css */
-
-/* Styling for the selected episode card */
 .episode-selector.border-primary {
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5); /* Bootstrap's focus ring color */
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5);
     transform: scale(1.03);
     transition: transform 0.1s ease-in-out;
-    border-width: 2px !important; /* Make border thicker */
+    border-width: 2px !important;
 }
 
-/* Ensure images/placeholders in episode cards maintain aspect ratio */
 .episode-selector .card-img-top {
     aspect-ratio: 16 / 9;
-    object-fit: cover; /* Cover the area without stretching */
-    background-color: #e9ecef; /* Fallback background for placeholders */
+    object-fit: cover;
+    background-color: #e9ecef;
 }
 
-/* Style for the placeholder when no preview is available */
 .episode-selector .card-img-top small {
     font-size: 0.8rem;
 }
 
-/* Reduce default card padding for smaller episode cards */
 .episode-selector .card-body {
     padding: 0.5rem;
-    font-size: 0.85rem; /* Slightly smaller text */
+    font-size: 0.85rem;
 }
 
-/* Style for translation buttons */
 #translation-selector-placeholder .translation-btn {
-    /* Base styles are btn btn-sm btn-outline-primary me-1 mb-1 */
-    /* Add specific overrides if needed */
-    font-size: 0.8rem; /* Make buttons slightly smaller */
+    font-size: 0.8rem;
     padding: 0.2rem 0.5rem;
 }
 
 #translation-selector-placeholder .translation-btn.active {
-    /* Style for the selected translation button (already handled by Bootstrap .active class + btn-primary) */
-    /* You can add extra emphasis if desired */
     font-weight: bold;
 }
 
-/* Ensure consistent height for cards in the grid row */
 .episodes-grid .card {
     display: flex;
     flex-direction: column;
 }
 
 .episodes-grid .card-body {
-    flex-grow: 1; /* Allow body to take remaining space */
+    flex-grow: 1;
 }
 
-/* Optional: Style for the player placeholder */
 #player-placeholder .border {
-    /* Style the "Select episode/translation" message box */
     border-style: dashed !important;
 }
 
-/* Ensure tabs look okay */
 .nav-tabs .nav-link {
-    margin-bottom: -1px; /* Standard Bootstrap adjustment */
-}
-
-/* Adjust spacing if needed */
-#seasons-tab {
-    /* Example: margin-bottom: 1.5rem; */
+    margin-bottom: -1px;
 }
 
 #translation-selector-placeholder {
-    min-height: 2.5rem; /* Ensure space even if no translations initially */
+    min-height: 2.5rem;
 }
+
+/* --- Styles for Media Item List Card View --- */
+.media-list-card .card-img-top {
+    aspect-ratio: 2 / 3; /* Portrait aspect ratio for posters */
+    object-fit: cover;
+    background-color: #e9ecef; /* Placeholder background */
+}
+
+.media-list-card .card-img-top small {
+    font-size: 0.9rem;
+}
+
+/* Ensure card takes full height for consistent alignment */
+.media-list-card.card {
+    /* height: 100%; handled by h-100 bootstrap class */
+}
+
+/* Adjust title font size and line clamping */
+.media-list-card .card-title {
+    font-size: 0.9rem;
+    /* Optional: Multi-line clamp */
+    /* display: -webkit-box; */
+    /* -webkit-line-clamp: 2; */
+    /* -webkit-box-orient: vertical; */
+    /* overflow: hidden; */
+    /* text-overflow: ellipsis; */
+}
+
+.media-list-card .card-body {
+    padding: 0.75rem; /* Adjust padding */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Push text to top and bottom */
+}
+
+.media-list-card .card-text {
+    font-size: 0.8rem;
+}
+
+.media-list-card .card-footer {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    background-color: transparent; /* Ensure no background interferes */
+    border-top: none; /* Remove border if desired */
+}
+
+/* --- End Styles for Media Item List Card View --- */
