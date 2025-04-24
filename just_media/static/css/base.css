@@ -43,46 +43,61 @@
     border-style: dashed !important;
 }
 
+/* Ensure iframe aspect ratio */
+.player-container {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    height: 0;
+    overflow: hidden;
+    max-width: 100%;
+    background: #000;
+    border-radius: var(--bs-border-radius); /* Optional: Match container radius */
+}
+
+.player-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none; /* Ensure no border */
+}
+
+
 .nav-tabs .nav-link {
     margin-bottom: -1px;
 }
+
+.nav-tabs-sm .nav-link {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+}
+
+/* Smaller tabs */
 
 #translation-selector-placeholder {
     min-height: 2.5rem;
 }
 
-/* --- Styles for Media Item List Card View --- */
 .media-list-card .card-img-top {
-    aspect-ratio: 2 / 3; /* Portrait aspect ratio for posters */
+    aspect-ratio: 2 / 3;
     object-fit: cover;
-    background-color: #e9ecef; /* Placeholder background */
+    background-color: #e9ecef;
 }
 
 .media-list-card .card-img-top small {
     font-size: 0.9rem;
 }
 
-/* Ensure card takes full height for consistent alignment */
-.media-list-card.card {
-    /* height: 100%; handled by h-100 bootstrap class */
-}
-
-/* Adjust title font size and line clamping */
 .media-list-card .card-title {
     font-size: 0.9rem;
-    /* Optional: Multi-line clamp */
-    /* display: -webkit-box; */
-    /* -webkit-line-clamp: 2; */
-    /* -webkit-box-orient: vertical; */
-    /* overflow: hidden; */
-    /* text-overflow: ellipsis; */
 }
 
 .media-list-card .card-body {
-    padding: 0.75rem; /* Adjust padding */
+    padding: 0.75rem;
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Push text to top and bottom */
+    justify-content: space-between;
 }
 
 .media-list-card .card-text {
@@ -92,8 +107,103 @@
 .media-list-card .card-footer {
     padding: 0.5rem 0.75rem;
     font-size: 0.75rem;
-    background-color: transparent; /* Ensure no background interferes */
-    border-top: none; /* Remove border if desired */
+    background-color: transparent;
+    border-top: none;
 }
 
-/* --- End Styles for Media Item List Card View --- */
+/* --- Player Layout Styles --- */
+
+/* Default: Episodes Below */
+#watch-area-container.layout-episodes-below {
+    display: block; /* Standard block layout */
+}
+
+#watch-area-container.layout-episodes-below #episodes-container-column {
+    display: block; /* Ensure visible */
+    margin-top: 1.5rem; /* Space between player area and episodes */
+    max-height: none;
+    overflow-y: visible;
+}
+
+/* Layout: Episodes Right */
+#watch-area-container.layout-episodes-right {
+    display: grid;
+    /* Adjust grid columns for different screen sizes if needed */
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); /* Player takes more space */
+    gap: 1.5rem; /* Gap between player and episode list */
+    align-items: start; /* Align items to the top */
+}
+
+#watch-area-container.layout-episodes-right #player-container-column {
+    /* Player area takes the first column */
+}
+
+#watch-area-container.layout-episodes-right #episodes-container-column {
+    display: block; /* Ensure visible */
+    margin-top: 0;
+    /* Adjust max-height based on viewport height, consider navbar height */
+    max-height: calc(80vh - 100px); /* Example: 80% of viewport minus approx header/other elements */
+    overflow-y: auto; /* Add scroll if episodes overflow */
+    padding-right: 0.5rem; /* Add some padding for the scrollbar */
+}
+
+/* Adjust episode grid columns for sidebar layout */
+#watch-area-container.layout-episodes-right .episodes-grid {
+    /* Make cards smaller in sidebar view */
+    --bs-gutter-x: 0.5rem;
+    --bs-gutter-y: 0.5rem;
+    /* Force fewer columns, e.g., 2 or adjust minmax */
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); /* Adjust min size */
+}
+
+#watch-area-container.layout-episodes-right .episodes-grid .episode-selector .card-body {
+    font-size: 0.75rem;
+    padding: 0.3rem;
+}
+
+#watch-area-container.layout-episodes-right .episodes-grid .episode-selector .card-img-top {
+    min-height: 60px; /* Adjust min height for smaller cards */
+    aspect-ratio: 16 / 9; /* Maintain aspect ratio */
+}
+
+
+/* Layout: Player Only */
+#watch-area-container.layout-player-only {
+    display: block; /* Back to block layout */
+}
+
+#watch-area-container.layout-player-only #episodes-container-column {
+    display: none !important; /* Hide episode section completely */
+}
+
+/* Responsive adjustments for sidebar layout */
+@media (max-width: 991.98px) {
+    /* Below large screens, stack episodes-right layout */
+    #watch-area-container.layout-episodes-right {
+        display: block; /* Stack player and episodes */
+        grid-template-columns: 1fr; /* Reset grid */
+    }
+
+    #watch-area-container.layout-episodes-right #episodes-container-column {
+        margin-top: 1.5rem;
+        max-height: none; /* Remove max height when stacked */
+        overflow-y: visible;
+        padding-right: 0;
+    }
+
+    /* Revert episode grid to default columns when stacked */
+    #watch-area-container.layout-episodes-right .episodes-grid {
+        grid-template-columns: none; /* Let Bootstrap handle row-cols-* defined in HTML */
+        --bs-gutter-x: var(--bs-gutter-x); /* Use default gutter from Bootstrap */
+        --bs-gutter-y: var(--bs-gutter-y);
+    }
+
+    #watch-area-container.layout-episodes-right .episodes-grid .episode-selector .card-body {
+        font-size: 0.85rem; /* Revert font size */
+        padding: 0.5rem; /* Revert padding */
+    }
+
+    #watch-area-container.layout-episodes-right .episodes-grid .episode-selector .card-img-top {
+        min-height: 80px; /* Revert min height */
+    }
+}
