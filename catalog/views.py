@@ -14,6 +14,7 @@ class MediaItemListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
+        """Prefetches related data for list optimization."""
         return MediaItem.objects.prefetch_related('genres', 'countries').order_by('-updated_at', 'title')
 
 
@@ -57,7 +58,6 @@ class MediaItemDetailView(DetailView):
                                         'link_pk': link.pk,
                                         'quality': link.quality_info
                                     })
-
                         episode_links.sort(key=lambda x: x['translation_title'])
                         episodes_data[episode.pk] = episode_links
 
@@ -65,7 +65,6 @@ class MediaItemDetailView(DetailView):
         return context
 
 
-# --- UPDATED PlaySourceLinkView ---
 class PlaySourceLinkView(DetailView):
     """ Renders a minimal HTML page containing only the player iframe. """
     model = MediaSourceLink
@@ -73,12 +72,13 @@ class PlaySourceLinkView(DetailView):
     context_object_name = 'source_link'
 
     def get_queryset(self):
-        """ No complex related data needed for the simplified template. """
-
-        return MediaSourceLink.objects.all()
+        """Selects related data needed *within* the simplified player page."""
+        return MediaSourceLink.objects.select_related(
+            'source',
+            'translation'
+        ).all()
 
     def get_context_data(self, **kwargs):
-        """ No extra context needed for the simplified template. """
+        """Provides minimal context needed for the iframe source page."""
         context = super().get_context_data(**kwargs)
-
         return context
