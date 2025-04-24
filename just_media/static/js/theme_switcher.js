@@ -9,7 +9,7 @@
     const DARK_THEME = 'dark';
 
     const themeSwitcherBtn = document.getElementById('theme-switcher-btn');
-    const themeSwitcherText = document.getElementById('theme-switcher-text'); // Optional text display
+    const themeSwitcherText = document.getElementById('theme-switcher-text');
 
     // --- Helper Functions ---
     const getStoredTheme = () => localStorage.getItem(THEME_STORAGE_KEY);
@@ -32,15 +32,13 @@
         if (themeSwitcherText) {
             themeSwitcherText.textContent = theme === DARK_THEME ? 'Light' : 'Dark'; // Suggest switching to the opposite
         }
-        // You could also change button icon or style here
     };
 
     // --- Initialization ---
     const currentTheme = getPreferredTheme();
-    applyTheme(currentTheme); // Apply theme on initial load
+    applyTheme(currentTheme);
 
     // --- Event Listeners ---
-    // Listener for manual theme toggle via button
     if (themeSwitcherBtn) {
         themeSwitcherBtn.addEventListener('click', () => {
             const currentAppliedTheme = document.documentElement.getAttribute(THEME_ATTR);
@@ -52,8 +50,6 @@
         console.warn('Theme switcher button not found.');
     }
 
-    // Optional: Listener for changes in OS theme preference
-    // This will only change the theme if the user hasn't manually set one via the button
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         const storedTheme = getStoredTheme();
         if (!storedTheme) { // Only react if no theme is manually stored
@@ -63,4 +59,4 @@
         }
     });
 
-})(); // Immediately Invoked Function Expression (IIFE)
+})();

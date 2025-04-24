@@ -1,19 +1,20 @@
 # catalog/management/commands/parse_kodik.py
 
+import json
 import logging
 import time
-import json
 from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+
 from dateutil.parser import isoparse
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction, IntegrityError
-from django.conf import settings
+
 from catalog.models import (
     MediaItem, Genre, Country, Source, MediaItemSourceMetadata
 )
 from catalog.services.kodik_client import KodikApiClient
 from catalog.services.kodik_mapper import map_kodik_item_to_models
-from typing import Dict, Any, Optional
 
 try:
     from tqdm import tqdm
@@ -48,9 +49,6 @@ class Command(BaseCommand):
                             help='Sort direction.')
         parser.add_argument('--with-material-data', action='store_true',
                             help='Request additional material data (needed for genres, countries, description, poster).')
-        # --- REMOVED OBSOLETE FLAGS ---
-        # parser.add_argument('--with-episodes-data', action='store_true', help='Request detailed season and episode data.') # Handled by update_translations
-        # parser.add_argument('--force-update-links', action='store_true', help='Update/create source links even if main item data is not newer.') # Handled by update_translations
         parser.add_argument('--fill-empty-fields', action='store_true',
                             help='Update empty fields on existing items even if API data is not newer.')
 
@@ -90,9 +88,6 @@ class Command(BaseCommand):
             media_item_data = mapped_data.get('media_item_data', {})
             genre_names = mapped_data.get('genres', [])
             country_names = mapped_data.get('countries', [])
-            # --- REMOVED link/season data extraction ---
-            # main_link_data = mapped_data.get('main_source_link_data')
-            # seasons_data = mapped_data.get('seasons_data', [])
 
             if not media_item_data.get('title'):
                 logger.warning(f"Skipping item {item_id_str} due to missing title after mapping.")
@@ -207,9 +202,8 @@ class Command(BaseCommand):
                     f"  Skipping main data update for '{media_item.title}' (API data not newer/no empty fields)",
                     verbosity=2)
 
-            # --- REMOVED logic for Links, Seasons, Episodes, Screenshots ---
 
-            if should_update_main_data:  # Update timestamp only if main data was processed as newer
+            if should_update_main_data:
                 try:
                     metadata.source_last_updated_at = api_updated_at
                     metadata.save(update_fields=['source_last_updated_at'])
@@ -245,7 +239,6 @@ class Command(BaseCommand):
         if options['year']: api_params['year'] = options['year']
         if options['sort']: api_params['sort'] = options['sort']
         if options['order']: api_params['order'] = options['order']
-        # Ensure material_data is requested if needed for genres/countries etc.
         api_params['with_material_data'] = 'true'
         limit_per_page = min(max(options['limit_items_per_page'], 1), 100)
 
@@ -317,7 +310,7 @@ class Command(BaseCommand):
                     page_start_time = time.time()
                     for item_data in results_iterable:
                         items_on_page_processed += self._process_single_item(
-                            item_data, kodik_source, fill_empty_fields  # Removed force_update_links
+                            item_data, kodik_source, fill_empty_fields
                         )
 
                     page_duration = time.time() - page_start_time

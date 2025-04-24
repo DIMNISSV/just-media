@@ -1,11 +1,71 @@
 /* static/css/base.css */
+
+/* Styling for the selected episode card */
 .episode-selector.border-primary {
-    /* Style for the selected episode */
     box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5); /* Bootstrap's focus ring color */
     transform: scale(1.03);
     transition: transform 0.1s ease-in-out;
+    border-width: 2px !important; /* Make border thicker */
 }
+
+/* Ensure images/placeholders in episode cards maintain aspect ratio */
 .episode-selector .card-img-top {
-    aspect-ratio: 16 / 9; /* Maintain aspect ratio for images/placeholders */
+    aspect-ratio: 16 / 9;
     object-fit: cover; /* Cover the area without stretching */
+    background-color: #e9ecef; /* Fallback background for placeholders */
+}
+
+/* Style for the placeholder when no preview is available */
+.episode-selector .card-img-top small {
+    font-size: 0.8rem;
+}
+
+/* Reduce default card padding for smaller episode cards */
+.episode-selector .card-body {
+    padding: 0.5rem;
+    font-size: 0.85rem; /* Slightly smaller text */
+}
+
+/* Style for translation buttons */
+#translation-selector-placeholder .translation-btn {
+    /* Base styles are btn btn-sm btn-outline-primary me-1 mb-1 */
+    /* Add specific overrides if needed */
+    font-size: 0.8rem; /* Make buttons slightly smaller */
+    padding: 0.2rem 0.5rem;
+}
+
+#translation-selector-placeholder .translation-btn.active {
+    /* Style for the selected translation button (already handled by Bootstrap .active class + btn-primary) */
+    /* You can add extra emphasis if desired */
+    font-weight: bold;
+}
+
+/* Ensure consistent height for cards in the grid row */
+.episodes-grid .card {
+    display: flex;
+    flex-direction: column;
+}
+
+.episodes-grid .card-body {
+    flex-grow: 1; /* Allow body to take remaining space */
+}
+
+/* Optional: Style for the player placeholder */
+#player-placeholder .border {
+    /* Style the "Select episode/translation" message box */
+    border-style: dashed !important;
+}
+
+/* Ensure tabs look okay */
+.nav-tabs .nav-link {
+    margin-bottom: -1px; /* Standard Bootstrap adjustment */
+}
+
+/* Adjust spacing if needed */
+#seasons-tab {
+    /* Example: margin-bottom: 1.5rem; */
+}
+
+#translation-selector-placeholder {
+    min-height: 2.5rem; /* Ensure space even if no translations initially */
 }

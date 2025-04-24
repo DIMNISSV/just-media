@@ -2,21 +2,20 @@
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
+
 from .models import (
-    Genre, Country, Source, Translation,  # <<< Import Translation
+    Genre, Country, Source, Translation, 
     MediaItem, Season, Episode, MediaSourceLink,
     MediaItemSourceMetadata, Screenshot
 )
 
 
-# --- Register Translation model ---
 @admin.register(Translation)
 class TranslationAdmin(admin.ModelAdmin):
     list_display = ('title', 'kodik_id')
     search_fields = ('title', 'kodik_id')
 
 
-# ... (Genre, Country, SourceAdmin registration remains the same) ...
 admin.site.register(Genre)
 admin.site.register(Country)
 
@@ -27,7 +26,6 @@ class SourceAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug')
 
 
-# ... (MediaItemSourceMetadataInline, SeasonInline registration remains the same) ...
 class MediaItemSourceMetadataInline(admin.TabularInline):
     model = MediaItemSourceMetadata
     extra = 0
@@ -43,7 +41,6 @@ class SeasonInline(admin.TabularInline):
     ordering = ('season_number',)
 
 
-# ... (MediaItemAdmin registration remains the same) ...
 @admin.register(MediaItem)
 class MediaItemAdmin(admin.ModelAdmin):
     list_display = ('title', 'release_year', 'media_type', 'kinopoisk_id', 'imdb_id', 'updated_at')
@@ -60,7 +57,6 @@ class MediaItemAdmin(admin.ModelAdmin):
     )
 
 
-# ... (EpisodeInline registration remains the same) ...
 class EpisodeInline(admin.TabularInline):
     model = Episode
     extra = 0
@@ -68,7 +64,6 @@ class EpisodeInline(admin.TabularInline):
     ordering = ('episode_number',)
 
 
-# ... (SeasonAdmin registration remains the same) ...
 @admin.register(Season)
 class SeasonAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'media_item_link', 'season_number')
@@ -87,7 +82,6 @@ class SeasonAdmin(admin.ModelAdmin):
     media_item_link.admin_order_field = 'media_item'
 
 
-# ... (EpisodeAdmin registration remains the same) ...
 @admin.register(Episode)
 class EpisodeAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'season_link', 'episode_number', 'title')
@@ -106,19 +100,16 @@ class EpisodeAdmin(admin.ModelAdmin):
     season_link.admin_order_field = 'season'
 
 
-# --- Updated MediaSourceLinkAdmin ---
 @admin.register(MediaSourceLink)
 class MediaSourceLinkAdmin(admin.ModelAdmin):
-    # --- CHANGED: Replaced translation_info with translation ---
     list_display = (
-    'get_target_str', 'source', 'quality_info', 'translation', 'added_at', 'last_seen_at')  # Added last_seen_at
+        'get_target_str', 'source', 'quality_info', 'translation', 'added_at', 'last_seen_at') 
     list_filter = (
-    'source', 'quality_info', 'translation', 'added_at', 'last_seen_at')  # Added translation and last_seen_at
-    # --- END CHANGE ---
+        'source', 'quality_info', 'translation', 'added_at', 'last_seen_at') 
     search_fields = ('media_item__title', 'episode__title', 'player_link', 'source_specific_id',
-                     'translation__title')  # Added translation title search
-    readonly_fields = ('added_at', 'last_seen_at')  # Added last_seen_at
-    autocomplete_fields = ['media_item', 'episode', 'source', 'translation']  # Added translation
+                     'translation__title') 
+    readonly_fields = ('added_at', 'last_seen_at') 
+    autocomplete_fields = ['media_item', 'episode', 'source', 'translation'] 
 
     @admin.display(description='Target')
     def get_target_str(self, obj):
@@ -146,7 +137,6 @@ class MediaSourceLinkAdmin(admin.ModelAdmin):
     get_target_str.admin_order_field = ('episode', 'media_item')
 
 
-# --- Updated MediaItemSourceMetadataAdmin ---
 @admin.register(MediaItemSourceMetadata)
 class MediaItemSourceMetadataAdmin(admin.ModelAdmin):
     list_display = ('media_item_link', 'source', 'source_last_updated_at')
@@ -165,7 +155,6 @@ class MediaItemSourceMetadataAdmin(admin.ModelAdmin):
     media_item_link.admin_order_field = 'media_item'
 
 
-# --- Register Screenshot model ---
 @admin.register(Screenshot)
 class ScreenshotAdmin(admin.ModelAdmin):
     list_display = ('episode_link', 'url_thumbnail')

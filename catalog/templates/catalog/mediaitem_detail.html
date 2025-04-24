@@ -7,11 +7,11 @@
 {% block content %}
     <div class="container mt-4">
         <div class="row">
-            {# --- Левая колонка (Постер и Метаданные) --- #}
+            {# --- Left Column (Poster & Metadata) --- #}
             <div class="col-lg-3 col-md-4 mb-3 mb-md-0">
                 {% if media_item.poster_url %}
                     <img src="{{ media_item.poster_url }}"
-                         alt="{% blocktrans %}Poster for {{ title }}{% endblocktrans %}"
+                         alt="{% blocktrans with title=media_item.title %}Poster for {{ title }}{% endblocktrans %}"
                          class="img-fluid rounded shadow-sm mb-3">
                 {% else %}
                     <div class="img-fluid rounded shadow-sm mb-3 bg-secondary text-white d-flex align-items-center justify-content-center"
@@ -38,18 +38,16 @@
                             {% endfor %}
                         </li>
                     {% endif %}
-                    {# TODO: Добавить вывод рейтинга и другой метаинформации, если есть #}
                 </ul>
             </div>
 
-            {# --- Правая колонка (Название, Описание, Плеер, Эпизоды) --- #}
+            {# --- Right Column (Title, Desc, Player, Episodes) --- #}
             <div class="col-lg-9 col-md-8">
                 <h1 class="mb-3">{{ media_item.title }}</h1>
                 {% if media_item.original_title and media_item.original_title != media_item.title %}
                     <p class="text-muted"><em>{% trans "Original Title" %}: {{ media_item.original_title }}</em></p>
                 {% endif %}
 
-                {# Описание (будет скрываться) #}
                 {% if media_item.description %}
                     <div id="media-description" class="mb-4">
                         <h2>{% trans "Description" %}</h2>
@@ -57,22 +55,19 @@
                     </div>
                 {% endif %}
 
-                {# Плейсхолдер для плеера #}
                 <div id="player-placeholder" class="mb-4" style="min-height: 100px;">
                     <div class="text-center text-muted border rounded p-5">{% trans "Select an episode below to start watching" %}</div>
                 </div>
 
-                {# TODO: Селектор источника (пока просто Kodik) #}
-                {# <div class="mb-3"><strong>{% trans "Source" %}:</strong> Kodik</div> #}
+                <div id="translation-selector-placeholder" class="mb-3">
+                    {# <!-- Translation buttons will be injected here by JS --> #}
+                </div>
 
-                {# --- Вкладки сезонов и эпизоды --- #}
-                {% if media_item.seasons.exists %} {# Используем exists() для проверки #}
+                {% if media_item.seasons.exists %}
                     <h2>{% trans "Seasons and Episodes" %}</h2>
-                    {# Вкладки Навигация #}
                     <ul class="nav nav-tabs mb-3" id="seasons-tab" role="tablist">
                         {% for season in media_item.seasons.all|dictsort:"season_number" %}
                             <li class="nav-item" role="presentation">
-                                {# Делаем первую вкладку (или 'Specials', если нет S1) активной #}
                                 <button class="nav-link {% if forloop.first %}active{% endif %}"
                                         id="season-tab-{{ season.pk|unlocalize }}"
                                         data-bs-toggle="tab"
@@ -80,43 +75,30 @@
                                         type="button" role="tab"
                                         aria-controls="season-pane-{{ season.pk|unlocalize }}"
                                         aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
-                                    {{ season }} {# Используем __str__ модели Season #}
+                                    {{ season }}
                                 </button>
                             </li>
                         {% endfor %}
                     </ul>
 
-                    {# Вкладки Содержимое #}
-                    <div class="tab-content" id="seasons-tab-content">
+                    {# --- Added data-media-pk here --- #}
+                    <div class="tab-content" id="seasons-tab-content" data-media-pk="{{ media_item.pk|unlocalize }}">
                         {% for season in media_item.seasons.all|dictsort:"season_number" %}
                             <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
                                  id="season-pane-{{ season.pk|unlocalize }}" role="tabpanel"
                                  aria-labelledby="season-tab-{{ season.pk|unlocalize }}" tabindex="0">
 
                                 {% if season.episodes.exists %}
-                                    {# Контейнер для эпизодов с горизонтальным рядом и переносом #}
                                     <div class="episodes-grid row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-2">
                                         {% for episode in season.episodes.all|dictsort:"episode_number" %}
-                                            {# --- Карточка/Ссылка Эпизода --- #}
-                                            {% with first_link=episode.source_links.first first_screenshot=episode.screenshots.first %}
-                                                {# <<< Получаем первую ссылку и скриншот #}
+                                            {% with first_screenshot=episode.screenshots.first %}
                                                 <div class="col">
                                                     <a href="#"
                                                        class="episode-selector card h-100 text-decoration-none text-dark"
-                                                            {# Передаем ID эпизода и ID его первой ссылки Kodik #}
                                                        data-episode-pk="{{ episode.pk|unlocalize }}"
-                                                       data-link-pk="{% if first_link %}{{ first_link.pk|unlocalize }}{% endif %}"
                                                        data-episode-num="{{ episode.episode_number|unlocalize }}"
-                                                            {# Для кнопок Next/Prev #}
                                                        data-season-num="{{ season.season_number|unlocalize }}"
-                                                            {# Для кнопок Next/Prev #}
                                                        title="
-
-
-
-
-
-
                                                                {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}"
                                                     >
                                                         {% if first_screenshot %}
@@ -139,7 +121,6 @@
                                                     </a>
                                                 </div>
                                             {% endwith %}
-                                            {# --- Конец Карточки Эпизода --- #}
                                         {% endfor %}
                                     </div>
                                 {% else %}
@@ -149,7 +130,6 @@
                         {% endfor %}
                     </div>
 
-                    {# Кнопки навигации по эпизодам (добавить под списком) #}
                     <div class="d-flex justify-content-between mt-3">
                         <button id="prev-episode-btn" class="btn btn-outline-secondary" type="button" disabled>
                             « {% trans "Previous" %}</button>
@@ -159,19 +139,17 @@
                     </div>
 
                 {% else %}
-                    {# Если у элемента тип сериал, но сезоны еще не загружены #}
                     {% if media_item.media_type in media_item.MediaType.TV_SHOW|add:media_item.MediaType.ANIME_SERIES|add:media_item.MediaType.CARTOON_SERIAL %}
-                        {# Проверка типов #}
                         <p>{% trans "Episode list is not available yet." %}</p>
                     {% endif %}
                 {% endif %}
-                {# --- Конец Вкладок сезонов --- #}
             </div>
         </div>
     </div>
 
-    {# Ссылка для генерации URL плеера в JS #}
     <template id="player-url-template" data-url="{% url 'catalog:play_source_link' pk=0 %}"></template>
+
+    <script id="episodes-links-data" type="application/json">{{ episodes_links_json|safe }}</script>
 
 {% endblock content %}
 
