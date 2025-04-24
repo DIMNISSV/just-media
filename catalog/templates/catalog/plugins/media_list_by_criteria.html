@@ -1,0 +1,17 @@
+{# catalog/templates/catalog/plugins/media_list_by_criteria.html #}
+{% load i18n static l10n %}
+
+<div class="media-list-plugin mb-4">
+    {% if title %}<h3 class="h5">{{ title }}</h3>{% endif %}
+    {% if media_items %}
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-3">
+            {% for item in media_items %}
+                <div class="col">
+                    {% include "catalog/includes/media_item_card.html" with item=item %}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-muted">{% trans "No items found matching the criteria." %}</p>
+    {% endif %}
+</div>
