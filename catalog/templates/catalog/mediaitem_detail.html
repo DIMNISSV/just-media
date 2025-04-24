@@ -65,6 +65,14 @@
 
                 {% if media_item.seasons.exists %}
                     <h2>{% trans "Seasons and Episodes" %}</h2>
+                    <div class="d-flex justify-content-between mb-3">
+                        <button id="prev-episode-btn" class="btn btn-outline-secondary" type="button" disabled>
+                            « {% trans "Previous" %}</button>
+                        <button id="next-episode-btn" class="btn btn-outline-secondary"
+                                type="button">{% trans "Next Episode" %} »
+                        </button>
+                    </div>
+
                     <ul class="nav nav-tabs mb-3" id="seasons-tab" role="tablist">
                         {% for season in media_item.seasons.all|dictsort:"season_number" %}
                             <li class="nav-item" role="presentation">
@@ -81,7 +89,6 @@
                         {% endfor %}
                     </ul>
 
-                    {# --- Added data-media-pk here --- #}
                     <div class="tab-content" id="seasons-tab-content" data-media-pk="{{ media_item.pk|unlocalize }}">
                         {% for season in media_item.seasons.all|dictsort:"season_number" %}
                             <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
@@ -94,11 +101,12 @@
                                             {% with first_screenshot=episode.screenshots.first %}
                                                 <div class="col">
                                                     <a href="#"
-                                                       class="episode-selector card h-100 text-decoration-none text-dark"
+                                                       class="episode-selector card h-100 text-decoration-none"
                                                        data-episode-pk="{{ episode.pk|unlocalize }}"
                                                        data-episode-num="{{ episode.episode_number|unlocalize }}"
                                                        data-season-num="{{ season.season_number|unlocalize }}"
                                                        title="
+
                                                                {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}"
                                                     >
                                                         {% if first_screenshot %}
@@ -128,14 +136,6 @@
                                 {% endif %}
                             </div>
                         {% endfor %}
-                    </div>
-
-                    <div class="d-flex justify-content-between mt-3">
-                        <button id="prev-episode-btn" class="btn btn-outline-secondary" type="button" disabled>
-                            « {% trans "Previous" %}</button>
-                        <button id="next-episode-btn" class="btn btn-outline-secondary"
-                                type="button">{% trans "Next Episode" %} »
-                        </button>
                     </div>
 
                 {% else %}
