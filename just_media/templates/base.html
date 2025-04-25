@@ -32,17 +32,16 @@
 
                 {# --- Theme Switcher & Auth --- #}
                 <div class="d-flex align-items-center">
-                    {# --- Auth Links --- #}
+                     {# --- Auth Links --- #}
                     <div class="me-2">
                         {% if user.is_authenticated %}
-                            <span class="navbar-text small me-2">
+                             <span class="navbar-text small me-2">
                                  {% blocktrans with username=user.get_username %}Hi, {{ username }}!{% endblocktrans %}
                              </span>
-                            <form action="{% url 'logout' %}" method="post" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit"
-                                        class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</button>
-                            </form>
+                             <form action="{% url 'logout' %}" method="post" class="d-inline">
+                                 {% csrf_token %}
+                                 <button type="submit" class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</button>
+                             </form>
                         {% else %}
                             <a href="{% url 'login' %}" class="btn btn-outline-primary btn-sm">{% trans 'Login' %}</a>
                         {% endif %}
@@ -51,14 +50,11 @@
 
                     <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm" type="button"
                             aria-label="{% trans 'Toggle theme' %}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                             class="bi bi-circle-half" viewBox="0 0 16 16">
-                            <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/>
-                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-circle-half" viewBox="0 0 16 16"> <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/> </svg>
                         <span class="d-none d-md-inline ms-1" id="theme-switcher-text"></span>
                     </button>
                 </div>
-                {# --- End Theme Switcher & Auth --- #}
+                 {# --- End Theme Switcher & Auth --- #}
 
             </div>
         </div>
