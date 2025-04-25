@@ -9,7 +9,7 @@
         <h1>{% trans "Advanced Search" %}</h1>
 
         {# --- Advanced Search Form --- #}
-        <form method="get" action="{% url 'catalog:mediaitem_search' %}" class="mb-4 p-3 border rounded bg-light">
+        <form method="get" action="{% url 'catalog:mediaitem_search' %}" class="mb-4 p-3 border rounded">
             <div class="row g-2">
                 <div class="col-md-6">
                     {{ search_form.q.label_tag }}
