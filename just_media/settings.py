@@ -248,3 +248,6 @@ if not KODIK_API_TOKEN and DEBUG:
 elif not KODIK_API_TOKEN and not DEBUG:
     # Optional: raise an error if token is missing in production
     raise ImproperlyConfigured("KODIK_API_TOKEN must be set in environment variables for production.")
+
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'

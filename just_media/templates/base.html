@@ -3,7 +3,6 @@
 {% load cms_tags menu_tags static i18n sekizai_tags %}
 {% block base_css %}
     {{ block.super }}
-    {# --- Load Custom CSS --- #}
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
 {% endblock %}
 
@@ -25,13 +24,31 @@
                 <form class="d-flex ms-auto me-3" role="search" action="{% url 'catalog:mediaitem_search' %}"
                       method="get">
                     <input class="form-control form-control-sm me-2" type="search" name="q"
-                           value="{{ search_query|default:'' }}" placeholder="{% trans 'Search Catalog...' %}"
+                           value="{{ request.GET.q|default:'' }}" placeholder="{% trans 'Search Catalog...' %}"
                            aria-label="Search">
                     <button class="btn btn-outline-success btn-sm" type="submit">{% trans 'Search' %}</button>
                 </form>
                 {# --- End Search Form --- #}
 
+                {# --- Theme Switcher & Auth --- #}
                 <div class="d-flex align-items-center">
+                    {# --- Auth Links --- #}
+                    <div class="me-2">
+                        {% if user.is_authenticated %}
+                            <span class="navbar-text small me-2">
+                                 {% blocktrans with username=user.get_username %}Hi, {{ username }}!{% endblocktrans %}
+                             </span>
+                            <a href="{% url 'logout' %}" class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</a>
+                            {# Add link to password change later if needed #}
+                            {# <a href="{% url 'password_change' %}" class="btn btn-outline-secondary btn-sm">{% trans 'Change Password' %}</a> #}
+                        {% else %}
+                            <a href="{% url 'login' %}" class="btn btn-outline-primary btn-sm">{% trans 'Login' %}</a>
+                            {# Add link to registration later if needed #}
+                            {# <a href="{% url 'register' %}" class="btn btn-outline-secondary btn-sm">{% trans 'Register' %}</a> #}
+                        {% endif %}
+                    </div>
+                    {# --- End Auth Links --- #}
+
                     <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm" type="button"
                             aria-label="{% trans 'Toggle theme' %}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
