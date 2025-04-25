@@ -1,4 +1,6 @@
 # catalog/models.py
+# Import CMSPlugin for plugin models
+from cms.models.pluginmodel import CMSPlugin
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
@@ -181,24 +183,6 @@ class MediaSourceLink(models.Model):
         verbose_name = _("Media Source Link")
         verbose_name_plural = _("Media Source Links")
         ordering = ['-added_at']
-        unique_together = [
-            ('episode', 'translation', 'source'),
-            ('media_item', 'episode', 'translation', 'source')
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['episode', 'translation', 'source'],
-                name='unique_episode_translation_source_link',
-                condition=models.Q(media_item__isnull=True) & models.Q(episode__isnull=False) & models.Q(
-                    translation__isnull=False)
-            ),
-            models.UniqueConstraint(
-                fields=['media_item', 'translation', 'source'],
-                name='unique_mediaitem_translation_source_link',
-                condition=models.Q(media_item__isnull=False) & models.Q(episode__isnull=True) & models.Q(
-                    translation__isnull=False)
-            ),
-        ]
 
     def clean(self):
         if self.media_item is None and self.episode is None:
@@ -249,3 +233,96 @@ class Screenshot(models.Model):
 
     def __str__(self):
         return f"Screenshot for {self.episode}"
+
+
+# --- CMS Plugin Models ---
+
+class LatestMediaPluginModel(CMSPlugin):
+    """
+    Model for the 'Latest Media' CMS plugin.
+    Stores the number of items to display.
+    """
+    latest_count = models.PositiveIntegerField(
+        _("Number of items"),
+        default=5,
+        help_text=_("How many latest media items to show.")
+    )
+
+    def __str__(self):
+        # Use str() to evaluate the lazy translation
+        return str(_("Latest %(count)d Media Items") % {'count': self.latest_count})
+
+
+class FeaturedMediaPluginModel(CMSPlugin):
+    """
+    Model for the 'Featured Media' CMS plugin.
+    Allows manually selecting specific MediaItems.
+    """
+    title = models.CharField(_("Title"), max_length=150, blank=True,
+                             help_text=_("Optional title for this section."))
+    items = models.ManyToManyField(
+        MediaItem,
+        verbose_name=_("Featured Items"),
+        help_text=_("Select the media items to feature.")
+    )
+
+    def __str__(self):
+        # Use str() to evaluate the lazy translation
+        if self.title:
+            return self.title
+        count = self.items.count() if self.pk else 0  # Check if saved
+        return str(_("Featured Media (%(count)d)") % {'count': count})
+
+    def copy_relations(self, oldinstance):
+        """Ensure M2M relations are copied when plugin is copied."""
+        self.items.set(oldinstance.items.all())
+
+
+class MediaListByCriteriaPluginModel(CMSPlugin):
+    """
+    Model for the 'Media List by Criteria' CMS plugin.
+    Allows defining filters to dynamically display a list of MediaItems.
+    """
+    title = models.CharField(_("Title"), max_length=150, blank=True,
+                             help_text=_("Optional title for this section."))
+    genres = models.ManyToManyField(
+        Genre, verbose_name=_("Filter by Genres"), blank=True,
+        help_text=_("Show items matching ANY of these genres (leave blank for any).")
+    )
+    countries = models.ManyToManyField(
+        Country, verbose_name=_("Filter by Countries"), blank=True,
+        help_text=_("Show items matching ANY of these countries (leave blank for any).")
+    )
+    media_type = models.CharField(
+        _("Filter by Media Type"), max_length=30, choices=MediaItem.MediaType.choices,
+        blank=True, null=True, help_text=_("Leave blank for any type.")
+    )
+    year_from = models.PositiveIntegerField(_("Year From"), blank=True, null=True,
+                                            help_text=_("Minimum release year."))
+    year_to = models.PositiveIntegerField(_("Year To"), blank=True, null=True,
+                                          help_text=_("Maximum release year."))
+
+    SORT_CHOICES = [
+        ('-updated_at', _('Recently Updated')),
+        ('-created_at', _('Recently Added')),
+        ('-release_year', _('Newest First')),
+        ('release_year', _('Oldest First')),
+        ('title', _('Title (A-Z)')),
+        ('-title', _('Title (Z-A)')),
+    ]
+    sort_by = models.CharField(
+        _("Sort Order"), max_length=50, choices=SORT_CHOICES, default='-updated_at'
+    )
+    max_items = models.PositiveIntegerField(
+        _("Maximum items"), default=10,
+        help_text=_("Maximum number of items to display in this list.")
+    )
+
+    def __str__(self):
+        # *** MODIFIED: Use str() to evaluate the lazy translation ***
+        return self.title or str(_("Media List by Criteria"))
+
+    def copy_relations(self, oldinstance):
+        """Ensure M2M relations are copied when plugin is copied."""
+        self.genres.set(oldinstance.genres.all())
+        self.countries.set(oldinstance.countries.all())

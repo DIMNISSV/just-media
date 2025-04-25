@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'djangocms_admin_style',
 
     'django.contrib.admin',
+    'accounts.apps.AccountsConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -81,7 +82,7 @@ INSTALLED_APPS = [
     'djangocms_frontend.contrib.navigation',
     'djangocms_frontend.contrib.tabs',
     'djangocms_frontend.contrib.utilities',
-    'catalog.apps.CatalogConfig'
+    'catalog.apps.CatalogConfig',
 ]
 
 MIDDLEWARE = [
@@ -248,3 +249,7 @@ if not KODIK_API_TOKEN and DEBUG:
 elif not KODIK_API_TOKEN and not DEBUG:
     # Optional: raise an error if token is missing in production
     raise ImproperlyConfigured("KODIK_API_TOKEN must be set in environment variables for production.")
+
+AUTH_USER_MODEL = 'accounts.User'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'

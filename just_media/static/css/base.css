@@ -1,5 +1,9 @@
 /* static/css/base.css */
 
+body {
+    min-width: 400px;
+}
+
 /* --- General Episode Selector Styling --- */
 .episode-selector {
     transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
@@ -24,7 +28,6 @@
 .episodes-grid .episode-selector .card-img-top {
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    background-color: #e9ecef; /* Placeholder color */
     border-bottom: 1px solid var(--bs-border-color); /* Separator */
 }
 
@@ -168,7 +171,6 @@
 .media-list-card .card-img-top {
     aspect-ratio: 2 / 3;
     object-fit: cover;
-    background-color: #e9ecef;
 }
 
 .media-list-card .card-img-top small {
