@@ -38,13 +38,13 @@
                             <span class="navbar-text small me-2">
                                  {% blocktrans with username=user.get_username %}Hi, {{ username }}!{% endblocktrans %}
                              </span>
-                            <a href="{% url 'logout' %}" class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</a>
-                            {# Add link to password change later if needed #}
-                            {# <a href="{% url 'password_change' %}" class="btn btn-outline-secondary btn-sm">{% trans 'Change Password' %}</a> #}
+                            <form action="{% url 'logout' %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit"
+                                        class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</button>
+                            </form>
                         {% else %}
                             <a href="{% url 'login' %}" class="btn btn-outline-primary btn-sm">{% trans 'Login' %}</a>
-                            {# Add link to registration later if needed #}
-                            {# <a href="{% url 'register' %}" class="btn btn-outline-secondary btn-sm">{% trans 'Register' %}</a> #}
                         {% endif %}
                     </div>
                     {# --- End Auth Links --- #}
@@ -58,6 +58,7 @@
                         <span class="d-none d-md-inline ms-1" id="theme-switcher-text"></span>
                     </button>
                 </div>
+                {# --- End Theme Switcher & Auth --- #}
 
             </div>
         </div>
