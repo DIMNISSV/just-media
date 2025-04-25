@@ -2,14 +2,14 @@
 {% extends "base.html" %}
 {% load i18n static l10n %}
 
-{% block title %}{% trans "Search Results" %} - {{ block.super }}{% endblock title %}
+{% block title %}{% trans "Search Results" %} - {% trans "Catalog" %} - {{ block.super }}{% endblock title %}
 
 {% block content %}
-    <div class="container mt-3">
+    <div class="container mt-4">
         <h1>{% trans "Advanced Search" %}</h1>
 
         {# --- Advanced Search Form --- #}
-        <form method="get" action="{% url 'catalog:mediaitem_search' %}" class="mb-4 p-3 border rounded">
+        <form method="get" action="{% url 'catalog:mediaitem_search' %}" class="mb-4 p-3 border rounded bg-light">
             <div class="row g-2">
                 <div class="col-md-6">
                     {{ search_form.q.label_tag }}

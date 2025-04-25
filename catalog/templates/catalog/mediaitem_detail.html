@@ -2,10 +2,10 @@
 {% extends "base.html" %}
 {% load i18n static l10n %}
 
-{% block title %}{{ media_item.title }} - {{ block.super }}{% endblock title %}
+{% block title %}{{ media_item.title }} - {% trans "Catalog" %} - {{ block.super }}{% endblock title %}
 
 {% block content %}
-    <div class="container mt-3">
+    <div class="container mt-4">
         {# --- Title Section --- #}
         <h1 class="mb-1">{{ media_item.title }}</h1>
         {% if media_item.original_title and media_item.original_title != media_item.title %}
@@ -191,7 +191,7 @@
                                                 {% for episode in season.prefetched_episodes %}
                                                     <div class="col">
                                                         <a href="#"
-                                                           class="episode-selector card text-decoration-none"
+                                                           class="episode-selector card text-decoration-none text-dark"
                                                            data-episode-pk="{{ episode.pk|unlocalize }}"
                                                            data-episode-num="{{ episode.episode_number|unlocalize }}"
                                                            data-season-num="{{ season.season_number|unlocalize }}"

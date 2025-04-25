@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let episodeHidden = false;
         let addScrollClass = false;
         let addListViewClass = false;
-        let episodeMargin = 'mt-3';
+        let episodeMarginTop = 'mt-3';
 
         switch (chosenLayout) {
             case 'episodes_right':
@@ -460,18 +460,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 episodeColClasses = ['col-lg-3', 'col-md-12'];
                 addScrollClass = true;
                 addListViewClass = true;
-                episodeMargin = 'mt-3 mt-lg-0';
+                episodeMarginTop = 'mt-3 mt-lg-0';
                 break;
             case 'player_only':
                 playerColClasses = ['col-12'];
                 episodeHidden = true;
-                episodeMargin = '';
+                episodeMarginTop = '';
                 break;
             case 'episodes_below':
-                episodeMargin = 'mt-3 mb-3';
+                episodeMarginTop = 'mt-3';
                 break;
         }
-        console.log(`Applying classes - Player: ${playerColClasses.join(' ')}, Episodes: ${episodeColClasses.join(' ')}, Hidden: ${episodeHidden}, Scroll: ${addScrollClass}, ListView: ${addListViewClass}, MarginTop: '${episodeMargin}'`);
+        console.log(`Applying classes - Player: ${playerColClasses.join(' ')}, Episodes: ${episodeColClasses.join(' ')}, Hidden: ${episodeHidden}, Scroll: ${addScrollClass}, ListView: ${addListViewClass}, MarginTop: '${episodeMarginTop}'`);
 
         playerContainerColumn.className = '';
         episodeListColumn.className = '';
@@ -482,8 +482,8 @@ document.addEventListener('DOMContentLoaded', () => {
             episodeListColumn.classList.add('d-none');
         } else {
             episodeListColumn.classList.remove('d-none');
-            if (episodeMargin) {
-                episodeMargin.split(' ').forEach(cls => episodeListColumn.classList.add(cls));
+            if (episodeMarginTop) {
+                episodeMarginTop.split(' ').forEach(cls => episodeListColumn.classList.add(cls));
             }
         }
         if (addScrollClass) {
