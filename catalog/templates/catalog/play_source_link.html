@@ -18,21 +18,40 @@
         iframe {
             border: none;
             display: block;
+            width: 100%;
+            height: 100%;
         }
-
     </style>
 </head>
 <body>
 
-<iframe src="{{ source_link.player_link }}"
-        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
-        frameborder="0"
-        scrolling="no"
+{# Use the URL possibly modified by the view to include start_from #}
+<iframe src="{{ player_url_with_start }}"
         allowfullscreen="allowfullscreen"
         webkitallowfullscreen="webkitallowfullscreen"
         mozallowfullscreen="mozallowfullscreen"
-        loading="eager"> {# Load the player immediately #}
+        loading="eager">
 </iframe>
+
+<script>
+    // Basic tracking: Inform parent when iframe is loaded
+    window.addEventListener('load', () => {
+        try {
+            const mediaInfo = {
+                type: 'playerLoaded',
+                linkPk: '{{ source_link.pk|unlocalize }}',
+                // Safely get media_item PK, checking both episode and direct link
+                mediaPk: '{% firstof source_link.media_item.pk source_link.episode.season.media_item.pk as media_pk %}{{ media_pk|unlocalize|default:"" }}',
+                episodePk: '{{ source_link.episode.pk|unlocalize|default:"" }}',
+                translationId: '{{ source_link.translation.kodik_id|default:"" }}'
+            };
+            window.parent.postMessage(mediaInfo, '*'); // Send to parent window
+            console.log("Player iframe loaded, message sent to parent.", mediaInfo);
+        } catch (e) {
+            console.error("Error sending postMessage from iframe:", e);
+        }
+    });
+</script>
 
 </body>
 </html>

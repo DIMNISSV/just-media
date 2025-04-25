@@ -1,57 +1,98 @@
 {# catalog/templates/catalog/mediaitem_list.html #}
-{% extends "base.html" %} {# <<< Inherit from CMS base template #}
-{% load i18n %} {# Optional: Load i18n tags if needed #}
+{% extends "base.html" %}
+{% load i18n static l10n %}
 
-{% block title %}{% trans "Media Catalog" %} - {{ block.super }}{% endblock title %} {# Optional: Set page title #}
+{% block title %}{% trans "Media Catalog" %} - {{ block.super }}{% endblock title %}
 
-{% block content %} {# <<< Wrap content in the main block #}
-    <h1>{% trans "Media Catalog" %}</h1>
+{% block content %}
+    <div class="container mt-4">
+        <h1>{% trans "Media Catalog" %}</h1>
 
-    {% if media_items %}
-        <ul>
-            {% for item in media_items %}
-                <li>
-                    {# Link to the detail view using the URL name defined in urls.py #}
-                    <a href="{% url 'catalog:mediaitem_detail' pk=item.pk %}">
-                        {{ item.title }}
-                        {% if item.release_year %}({{ item.release_year }}){% endif %}
-                    </a>
-                    <small>[{{ item.get_media_type_display }}]</small>
-                    {% if item.genres.all %}
-                        <br>{% trans "Genres" %}:
-                        {% for genre in item.genres.all %}
-                            {{ genre.name }}{% if not forloop.last %}, {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                </li>
-            {% empty %}
-                <li>{% trans "No media items found." %}</li>
-            {% endfor %}
-        </ul>
-
-        {# Optional: Pagination controls #}
-        {% if is_paginated %}
-            <div class="pagination">
-                <span class="step-links">
-                    {% if page_obj.has_previous %}
-                        <a href="?page=1">« {% trans "first" %}</a>
-                        <a href="?page={{ page_obj.previous_page_number }}">{% trans "previous" %}</a>
-                    {% endif %}
-
-                    <span class="current">
-                        {% blocktrans %}Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-                            .{% endblocktrans %}
-                    </span>
-
-                    {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}">{% trans "next" %}</a>
-                        <a href="?page={{ page_obj.paginator.num_pages }}">{% trans "last" %} »</a>
-                    {% endif %}
-                </span>
+        {% if media_items %}
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-3">
+                {% for item in media_items %}
+                    <div class="col">
+                        <div class="card h-100 shadow-sm">
+                            <a href="{% url 'catalog:mediaitem_detail' pk=item.pk %}" class="text-decoration-none">
+                                {% if item.poster_url %}
+                                    <img src="{{ item.poster_url }}" class="card-img-top"
+                                         alt="{% blocktrans with title=item.title %}Poster for {{ title }}{% endblocktrans %}"
+                                         style="aspect-ratio: 2 / 3; object-fit: cover;">
+                                {% else %}
+                                    <div class="card-img-top d-flex align-items-center justify-content-center"
+                                         style="aspect-ratio: 2 / 3;">
+                                        <small class="text-muted">{% trans "No Poster" %}</small>
+                                    </div>
+                                {% endif %}
+                            </a>
+                            <div class="card-body p-2 d-flex flex-column"> {# Use flex column for body #}
+                                <h6 class="card-title mb-1 flex-grow-1" style="font-size: 0.9rem;">
+                                    {# Title takes available space #}
+                                    <a href="{% url 'catalog:mediaitem_detail' pk=item.pk %}"
+                                       class="text-decoration-none stretched-link">{{ item.title|truncatechars:50 }}</a>
+                                </h6>
+                                <p class="card-text small text-muted mb-0 mt-auto"> {# Year/Type pushed to bottom #}
+                                    {% if item.release_year %}{{ item.release_year|unlocalize }}{% endif %}
+                                    {% if item.release_year %} / {% endif %}
+                                    {{ item.get_media_type_display }}
+                                </p>
+                            </div>
+                            {# --- Footer with Genres --- #}
+                            {% if item.genres.exists %} {# Check if genres exist before rendering footer #}
+                                <div class="card-footer bg-transparent border-top-0 p-1 px-2">
+                                    <small class="text-muted" style="font-size: 0.75rem;">
+                                        {% for genre in item.genres.all|slice:":2" %} {# Show first 2 genres max #}
+                                            {{ genre.name }}{% if not forloop.last %}, {% endif %}
+                                        {% endfor %}
+                                        {% if item.genres.count > 2 %}...{% endif %}
+                                    </small>
+                                </div>
+                            {% endif %}
+                            {# --- End Footer --- #}
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="col-12">
+                        <p>{% trans "No media items found." %}</p>
+                    </div>
+                {% endfor %}
             </div>
-        {% endif %}
 
-    {% else %}
-        <p>{% trans "No media items available in the catalog yet." %}</p>
-    {% endif %}
-{% endblock content %} {# <<< End content block #}
+            {% if is_paginated %}
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page=1">« {% trans "first" %}</a></li>
+                            <li class="page-item"><a class="page-link"
+                                                     href="?page={{ page_obj.previous_page_number }}">{% trans "previous" %}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">« {% trans "first" %}</span></li>
+                            <li class="page-item disabled"><span class="page-link">{% trans "previous" %}</span></li>
+                        {% endif %}
+
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">{% blocktrans %}Page {{ page_obj.number }} of
+                                {{ page_obj.paginator.num_pages }}{% endblocktrans %}</span>
+                        </li>
+
+                        {% if page_obj.has_next %}
+                            <li class="page-item"><a class="page-link"
+                                                     href="?page={{ page_obj.next_page_number }}">{% trans "next" %}</a>
+                            </li>
+                            <li class="page-item"><a class="page-link"
+                                                     href="?page={{ page_obj.paginator.num_pages }}">{% trans "last" %}
+                                »</a></li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">{% trans "next" %}</span></li>
+                            <li class="page-item disabled"><span class="page-link">{% trans "last" %} »</span></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+
+        {% else %}
+            <p>{% trans "No media items available in the catalog yet." %}</p>
+        {% endif %}
+    </div>
+{% endblock content %}

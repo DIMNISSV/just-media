@@ -59,23 +59,15 @@ class Translation(models.Model):
 
 class MediaItem(models.Model):
     class MediaType(models.TextChoices):
+        """Generic media type choices."""
         MOVIE = 'movie', _('Movie')
         TV_SHOW = 'tv_show', _('TV Show')
+        ANIME_MOVIE = 'anime_movie', _('Anime Movie')
         ANIME_SERIES = 'anime_series', _('Anime Series')
-        CARTOON = 'cartoon', _('Cartoon')
-        DOCUMENTARY = 'documentary', _('Documentary')
-        FOREIGN_MOVIE = 'foreign-movie', _('Foreign Movie (Kodik)')
-        SOVIET_CARTOON = 'soviet-cartoon', _('Soviet Cartoon (Kodik)')
-        FOREIGN_CARTOON = 'foreign-cartoon', _('Foreign Cartoon (Kodik)')
-        RUSSIAN_CARTOON = 'russian-cartoon', _('Russian Cartoon (Kodik)')
-        ANIME = 'anime', _('Anime (Kodik)')
-        RUSSIAN_MOVIE = 'russian-movie', _('Russian Movie (Kodik)')
-        CARTOON_SERIAL = 'cartoon-serial', _('Cartoon Serial (Kodik)')
-        DOCUMENTARY_SERIAL = 'documentary-serial', _('Documentary Serial (Kodik)')
-        RUSSIAN_SERIAL = 'russian-serial', _('Russian Serial (Kodik)')
-        FOREIGN_SERIAL = 'foreign-serial', _('Foreign Serial (Kodik)')
-        ANIME_SERIAL = 'anime-serial', _('Anime Serial (Kodik)')
-        MULTI_PART_FILM = 'multi-part-film', _('Multi-part Film (Kodik)')
+        CARTOON_MOVIE = 'cartoon_movie', _('Cartoon Movie')
+        CARTOON_SERIES = 'cartoon_series', _('Cartoon Series')
+        DOCUMENTARY_MOVIE = 'documentary_movie', _('Documentary Movie')
+        DOCUMENTARY_SERIES = 'documentary_series', _('Documentary Series')
         UNKNOWN = 'unknown', _('Unknown')
 
     title = models.CharField(_("Title"), max_length=255)
@@ -173,10 +165,7 @@ class MediaSourceLink(models.Model):
     player_link = models.URLField(_("Player Link"), max_length=2048)
 
     translation = models.ForeignKey(
-        Translation,
-        on_delete=models.SET_NULL,
-        related_name='links',
-        verbose_name=_("Translation"),
+        Translation, on_delete=models.SET_NULL, related_name='links', verbose_name=_("Translation"),
         blank=True, null=True
     )
 
@@ -186,7 +175,6 @@ class MediaSourceLink(models.Model):
                                           help_text=_(
                                               "ID of the content within the source system (e.g., 'movie-12345')"))
     last_seen_at = models.DateTimeField(_("Last Seen At"), blank=True, null=True, db_index=True)
-
     added_at = models.DateTimeField(_("Added At"), auto_now_add=True)
 
     class Meta:
