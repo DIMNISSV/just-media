@@ -1,21 +1,31 @@
-# accounts/forms.py
-from django.contrib.auth.forms import UserCreationForm
-from django.contrib.auth.models import User
+# accounts/forms.py (Изменить)
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
+from .models import User
 
 
-class SignUpForm(UserCreationForm):
+class CustomUserCreationForm(UserCreationForm):
     """
     A form that creates a user, with no privileges, from the given username and
-    password. Extends the default UserCreationForm if needed later.
+    password. Uses the custom User model.
     """
 
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ('username', 'email')
+        fields = ('username', 'email', 'first_name', 'last_name')
 
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.email = self.cleaned_data["email"]
-        if commit:
-            user.save()
-        return user
+
+class CustomUserChangeForm(UserChangeForm):
+    """
+    A form for updating users. Includes all the fields on
+    the user, but replaces the password field with admin's
+    password hash display field.
+    """
+
+    class Meta(UserChangeForm.Meta):
+        model = User
+        fields = (
+        'username', 'email', 'first_name', 'last_name', 'bio', 'is_active', 'is_staff', 'is_superuser', 'groups',
+        'user_permissions')
+
+class SignUpForm(CustomUserCreationForm):
+    pass
