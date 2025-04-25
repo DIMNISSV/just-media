@@ -81,7 +81,8 @@ INSTALLED_APPS = [
     'djangocms_frontend.contrib.navigation',
     'djangocms_frontend.contrib.tabs',
     'djangocms_frontend.contrib.utilities',
-    'catalog.apps.CatalogConfig'
+    'catalog.apps.CatalogConfig',
+    'accounts.apps.AccountsConfig'
 ]
 
 MIDDLEWARE = [
