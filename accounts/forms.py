@@ -5,8 +5,8 @@ from .models import User
 
 class CustomUserCreationForm(UserCreationForm):
     """
-    A form that creates a user, with no privileges, from the given username and
-    password. Uses the custom User model.
+    A form that creates a user, with no privileges, from the given username,
+    email and password. Uses the custom User model.
     """
 
     class Meta(UserCreationForm.Meta):
@@ -24,8 +24,13 @@ class CustomUserChangeForm(UserChangeForm):
     class Meta(UserChangeForm.Meta):
         model = User
         fields = (
-        'username', 'email', 'first_name', 'last_name', 'bio', 'is_active', 'is_staff', 'is_superuser', 'groups',
-        'user_permissions')
+            'username', 'email', 'first_name', 'last_name', 'bio', 'is_active', 'is_staff', 'is_superuser', 'groups',
+            'user_permissions')
+
 
 class SignUpForm(CustomUserCreationForm):
+    """
+    The form used for user sign up. Inherits required fields from
+    CustomUserCreationForm (username, email, passwords).
+    """
     pass
