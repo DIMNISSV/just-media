@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from dateutil.parser import isoparse
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction  # Import models
+from django.db import transaction
 from django.db.models import Q
 
 from catalog.models import (
@@ -31,6 +31,7 @@ KODIK_SOURCE_SLUG = 'kodik'
 class Command(BaseCommand):
     help = 'Parses CORE media data (MediaItem, Genres, Countries, Metadata) from Kodik API /list.'
 
+    # --- add_arguments, _get_kodik_source, _log - без изменений ---
     def add_arguments(self, parser):
         """Adds command line arguments."""
         parser.add_argument('--limit-pages', type=int, default=None, dest='limit_pages',
@@ -72,26 +73,89 @@ class Command(BaseCommand):
         q_object = Q()
         id_fields = ['kinopoisk_id', 'imdb_id', 'shikimori_id', 'mydramalist_id']
         for field in id_fields:
-            value = api_ids.get(field)  # Get value or None
-            # Use __isnull for None values to ensure correct matching
+            value = api_ids.get(field)
             if value is None:
                 q_object &= Q(**{f"{field}__isnull": True})
             else:
                 q_object &= Q(**{field: value})
         return q_object
 
+    def _find_subset_match(self, api_non_empty_ids: Dict[str, str]) -> Optional[MediaItem]:
+        """
+        Finds an existing MediaItem that is a 'subset' of the provided API IDs.
+        - Has at least one matching ID.
+        - All its non-empty IDs are present and match in the API IDs.
+        - API IDs contain at least one ID not present in the existing item.
+        Returns the best match (prioritizing KP/IMDb) or None.
+        """
+        if not api_non_empty_ids:
+            return None
+
+        candidate_query = Q()
+        for field, value in api_non_empty_ids.items():
+            candidate_query |= Q(**{field: value})
+
+        candidates = MediaItem.objects.filter(candidate_query)
+        if not candidates.exists():
+            return None
+
+        best_match = None
+        highest_priority_found = -1  # -1: none, 0: Shiki/MDL, 1: KP/IMDb
+
+        for item in candidates:
+            item_ids = {
+                'kinopoisk_id': item.kinopoisk_id,
+                'imdb_id': item.imdb_id,
+                'shikimori_id': item.shikimori_id,
+                'mydramalist_id': item.mydramalist_id,
+            }
+            item_non_empty_ids = {k: v for k, v in item_ids.items() if v}
+
+            if not item_non_empty_ids:
+                continue
+
+            is_subset = True
+            api_has_new_id = False
+
+            for field, value in item_non_empty_ids.items():
+                if field not in api_non_empty_ids or api_non_empty_ids[field] != value:
+                    is_subset = False
+                    break
+            if not is_subset:
+                continue
+
+            for field, value in api_non_empty_ids.items():
+                if field not in item_non_empty_ids:
+                    api_has_new_id = True
+                    break
+            if not api_has_new_id:
+                logger.warning(
+                    f"Item PK {item.pk} has the same non-empty IDs as API {api_non_empty_ids}, but wasn't found by exact match. Skipping as subset.")
+                continue
+
+            current_priority = -1
+            if item_ids.get('kinopoisk_id') or item_ids.get('imdb_id'):
+                current_priority = 1
+            elif item_ids.get('shikimori_id') or item_ids.get('mydramalist_id'):
+                if not ('kinopoisk_id' in api_non_empty_ids or 'imdb_id' in api_non_empty_ids):
+                    current_priority = 0
+
+            if current_priority > highest_priority_found:
+                highest_priority_found = current_priority
+                best_match = item
+            elif current_priority == highest_priority_found and best_match:
+                pass
+
+        return best_match
+
     @transaction.atomic
     def _process_single_item(self, item_data: Dict[str, Any], kodik_source: Source, fill_empty_fields: bool) -> Tuple[
         Optional[MediaItem], str]:
-        """
-        Processes a single item from Kodik API.
-        Tries to find an exact match, then updates or creates.
-        Returns the processed MediaItem (or None) and an action string ('created', 'updated', 'skipped', 'error').
-        """
+        """Processes a single item, including subset match logic."""
         item_id_str = item_data.get('id', 'N/A')
         api_updated_at_str = item_data.get('updated_at')
         api_updated_at: Optional[datetime] = None
-        action = 'skipped'  # Default action
+        action = 'skipped'
 
         if api_updated_at_str:
             try:
@@ -119,7 +183,6 @@ class Command(BaseCommand):
                 logger.warning(f"Skipping item {item_id_str} due to missing title after mapping.")
                 return None, 'skipped'
 
-            # Extract all potential IDs from the mapped data for matching
             api_ids = {
                 'kinopoisk_id': media_item_data.get('kinopoisk_id'),
                 'imdb_id': media_item_data.get('imdb_id'),
@@ -135,20 +198,27 @@ class Command(BaseCommand):
 
             media_item = None
             created = False
+            item_to_update = None
 
-            # --- Step 1: Exact Match Lookup ---
             exact_match_query = self._build_exact_match_query(api_ids)
             try:
-                media_item = MediaItem.objects.get(exact_match_query)
+                item_to_update = MediaItem.objects.get(exact_match_query)
                 action = 'exact_match_found'
                 self._log(
-                    f"  Found exact match by ID combination for item {item_id_str} -> MediaItem PK {media_item.pk}",
+                    f"  Found exact match by ID combination for item {item_id_str} -> MediaItem PK {item_to_update.pk}",
                     verbosity=2)
             except MediaItem.DoesNotExist:
-                self._log(f"  No exact match found for item {item_id_str}. Proceeding to check for updates/creation.",
-                          verbosity=3)
-                action = 'no_exact_match'  # Placeholder, will be updated
-                pass  # Continue processing later
+                self._log(f"  No exact match found for item {item_id_str}.", verbosity=3)
+                action = 'no_exact_match'
+                item_to_update = self._find_subset_match(api_non_empty_ids)
+                if item_to_update:
+                    action = 'subset_match_found'
+                    self._log(
+                        f"  Found subset match for item {item_id_str} -> Updating MediaItem PK {item_to_update.pk}",
+                        verbosity=2)
+                else:
+                    self._log(f"  No subset match found for item {item_id_str}. Will create new item.", verbosity=3)
+                    action = 'no_match_found'
             except MediaItem.MultipleObjectsReturned:
                 logger.error(
                     f"CRITICAL: Multiple MediaItems found with exact ID combination {api_ids} for Kodik item {item_id_str}. Manual intervention needed.")
@@ -158,80 +228,91 @@ class Command(BaseCommand):
                     f"Unexpected error during exact match lookup for item {item_id_str} with query {exact_match_query}: {e}")
                 return None, 'error'
 
-            # --- If exact match found, proceed to update check ---
-            if action == 'exact_match_found' and media_item:
+            if item_to_update and action in ['exact_match_found', 'subset_match_found']:
+                media_item = item_to_update
                 metadata, meta_created = MediaItemSourceMetadata.objects.get_or_create(
                     media_item=media_item, source=kodik_source
                 )
 
                 should_update_main_data = False
                 fields_to_update = {}
-                # Prepare data for potential update, excluding the IDs used for matching
-                defaults_for_update = media_item_data.copy()
-                for key in api_ids.keys():
-                    defaults_for_update.pop(key, None)
-
-                if meta_created or metadata.source_last_updated_at is None or api_updated_at > metadata.source_last_updated_at:
+                if action == 'subset_match_found':
                     should_update_main_data = True
-                    fields_to_update = defaults_for_update
-                    self._log(f"    API data is newer or metadata created for MediaItem {media_item.pk}.", verbosity=3)
-                elif fill_empty_fields:
-                    for field, value in defaults_for_update.items():
-                        if hasattr(media_item, field) and not getattr(media_item, field, None) and value:
-                            fields_to_update[field] = value
-                    if fields_to_update:
-                        self._log(
-                            f"    Planning to fill empty fields for MediaItem {media_item.pk}: {list(fields_to_update.keys())}",
-                            verbosity=2)
+                    fields_to_update = media_item_data.copy()
+                    self._log(f"    Subset match: Forcing update for MediaItem {media_item.pk}.", verbosity=3)
+                else:
+                    defaults_for_update = media_item_data.copy()
+                    for key in api_ids.keys():
+                        defaults_for_update.pop(key, None)
+
+                    if meta_created or metadata.source_last_updated_at is None or api_updated_at > metadata.source_last_updated_at:
+                        should_update_main_data = True
+                        fields_to_update = defaults_for_update
+                        self._log(f"    API data is newer or metadata created for MediaItem {media_item.pk}.",
+                                  verbosity=3)
+                    elif fill_empty_fields:
+                        for field, value in defaults_for_update.items():
+                            if hasattr(media_item, field) and not getattr(media_item, field, None) and value:
+                                fields_to_update[field] = value
+                        if fields_to_update:
+                            self._log(
+                                f"    Planning to fill empty fields for MediaItem {media_item.pk}: {list(fields_to_update.keys())}",
+                                verbosity=2)
 
                 if fields_to_update:
+                    if action == 'subset_match_found':
+                        for field, value in api_ids.items():
+                            if value is not None and getattr(media_item, field, None) != value:
+                                fields_to_update[field] = value
+                            elif value is None and getattr(media_item, field, None) is not None:
+                                fields_to_update[field] = None
+
                     self._log(f"    Updating fields for MediaItem {media_item.pk} ('{media_item.title}').", verbosity=2)
                     update_fields_list = list(fields_to_update.keys())
                     for field, value in fields_to_update.items():
                         setattr(media_item, field, value)
                     try:
-                        # Ensure 'updated_at' is handled by auto_now=True, exclude it if present
                         if 'updated_at' in update_fields_list:
                             update_fields_list.remove('updated_at')
-                        media_item.save(update_fields=update_fields_list)
-                        action = 'updated'  # Final action status
-                        self._log(f"      Updated fields: {', '.join(update_fields_list)}", verbosity=3)
+                        if update_fields_list:
+                            media_item.save(update_fields=update_fields_list)
+                            action = 'updated'
+                            self._log(f"      Updated fields: {', '.join(update_fields_list)}", verbosity=3)
+                        else:
+                            action = 'skipped'
+
                     except Exception as e:
                         logger.exception(f"Error saving updated fields for existing MediaItem {media_item.pk}: {e}")
                         return media_item, 'error'
 
-                    # Update M2M only if primary fields were updated
-                    try:
-                        genres_qs = Genre.objects.filter(name__in=[name.strip() for name in genre_names])
-                        current_genres = set(media_item.genres.all())
-                        target_genres = set(genres_qs) | {
-                            Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for name
-                            in genre_names if name.strip()}  # Ensure creation too
+                    if action == 'updated':
+                        try:
+                            genres_qs = Genre.objects.filter(name__in=[name.strip() for name in genre_names])
+                            current_genres = set(media_item.genres.all())
+                            target_genres = set(genres_qs) | {
+                                Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for
+                                name in genre_names if name.strip()}
+                            if current_genres != target_genres:
+                                media_item.genres.set(list(target_genres))
 
-                        if current_genres != target_genres:
-                            media_item.genres.set(list(target_genres))
+                            countries_qs = Country.objects.filter(name__in=[name.strip() for name in country_names])
+                            current_countries = set(media_item.countries.all())
+                            target_countries = set(countries_qs) | {
+                                Country.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for
+                                name in country_names if name.strip()}
+                            if current_countries != target_countries:
+                                media_item.countries.set(list(target_countries))
+                            self._log(f"      Checked/Updated M2M relations for MediaItem {media_item.pk}", verbosity=3)
+                        except Exception as e:
+                            logger.error(f"Error updating M2M for MediaItem {media_item.pk} during update: {e}")
 
-                        countries_qs = Country.objects.filter(name__in=[name.strip() for name in country_names])
-                        current_countries = set(media_item.countries.all())
-                        target_countries = set(countries_qs) | {
-                            Country.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for
-                            name in country_names if name.strip()}
-
-                        if current_countries != target_countries:
-                            media_item.countries.set(list(target_countries))
-
-                        self._log(f"      Checked/Updated M2M relations for MediaItem {media_item.pk}", verbosity=3)
-                    except Exception as e:
-                        logger.error(f"Error updating M2M for MediaItem {media_item.pk} during update: {e}")
-
-                elif should_update_main_data:  # No specific fields changed, but API was newer (maybe only M2M changed)
+                elif should_update_main_data:
                     try:
                         genres_qs = Genre.objects.filter(name__in=[name.strip() for name in genre_names])
                         current_genres = set(media_item.genres.all())
                         target_genres = set(genres_qs) | {
                             Genre.objects.get_or_create(name__iexact=name, defaults={'name': name.strip()})[0] for name
                             in genre_names if name.strip()}
-
                         countries_qs = Country.objects.filter(name__in=[name.strip() for name in country_names])
                         current_countries = set(media_item.countries.all())
                         target_countries = set(countries_qs) | {
@@ -245,25 +326,23 @@ class Command(BaseCommand):
                         if current_countries != target_countries:
                             media_item.countries.set(list(target_countries))
                             m2m_changed = True
-
                         if m2m_changed:
-                            action = 'updated'  # Mark as updated if only M2M changed
+                            action = 'updated'
+                        else:
+                            action = 'skipped'
+                        if m2m_changed:
                             self._log(f"      Updated M2M relations (API newer) for MediaItem {media_item.pk}",
                                       verbosity=3)
-                        else:
-                            action = 'skipped'  # Nothing changed even if API date was newer
-
                     except Exception as e:
                         logger.error(f"Error updating M2M for MediaItem {media_item.pk} when API newer: {e}")
-                        action = 'skipped'  # Treat as skipped if M2M update fails
+                        action = 'skipped'
 
                 else:
                     self._log(
                         f"    Skipping update for MediaItem {media_item.pk} (API data not newer/no empty fields/no M2M changes)",
                         verbosity=2)
-                    action = 'skipped'  # No changes were made
+                    action = 'skipped'
 
-                # Update metadata timestamp if we considered updating (API newer or meta created)
                 if should_update_main_data:
                     try:
                         metadata.source_last_updated_at = api_updated_at
@@ -274,49 +353,49 @@ class Command(BaseCommand):
 
                 return media_item, action
 
-            # --- Placeholder for next steps if no exact match ---
-            elif action == 'no_exact_match':
-                self._log(f"  Exact match not found for {item_id_str}. Further processing deferred.", verbosity=2)
-                return None, 'skipped_no_match'  # Special status for now
+            elif action == 'no_match_found':
+                self._log(f"  No exact or subset match found for {item_id_str}. Creation deferred.", verbosity=2)
+                return None, 'skipped_no_match'
 
-            else:  # Should not happen
-                logger.error(f"Unexpected state for item {item_id_str}. Action: {action}")
+            else:
+                logger.error(f"Unexpected processing state for item {item_id_str}. Action: {action}")
                 return None, 'error'
-
 
         except Exception as e:
             logger.error(f"Outer error processing item {item_id_str}.")
             logger.exception(
-                f"Exception details: {e}\n"
-                f"Problematic item data:\n{json.dumps(item_data, indent=2, ensure_ascii=False)}"
-            )
+                f"Exception details: {e}\nProblematic item data:\n{json.dumps(item_data, indent=2, ensure_ascii=False)}")
             return None, 'error'
 
     def handle(self, *args, **options):
         """Handles the command execution."""
         self.verbosity = options['verbosity']
         self._log(f"Starting Kodik CORE data parsing with verbosity level: {self.verbosity}", self.style.NOTICE)
-
         kodik_source = self._get_kodik_source()
         fill_empty_fields = options['fill_empty_fields']
-
         try:
             client = KodikApiClient()
         except ValueError as e:
             raise CommandError(f"API Client initialization failed: {e}")
 
         api_params = {}
-        if options['types']: api_params['types'] = options['types']
-        if options['year']: api_params['year'] = options['year']
-        if options['sort']: api_params['sort'] = options['sort']
-        if options['order']: api_params['order'] = options['order']
-        api_params['with_material_data'] = 'true'  # Always request material data
+        if options['types']:
+            api_params['types'] = options['types']
+        if options['year']:
+            api_params['year'] = options['year']
+        if options['sort']:
+            api_params['sort'] = options['sort']
+        if options['order']:
+            api_params['order'] = options['order']
+        api_params['with_material_data'] = 'true'
         limit_per_page = min(max(options['limit_items_per_page'], 1), 100)
 
         self._log(f"Using API parameters: {api_params}", verbosity=2)
         self._log(f"Items per page: {limit_per_page}", verbosity=2)
-        if options['target_page']: self._log(f"Will skip processing until page {options['target_page']}", verbosity=1)
-        if fill_empty_fields: self._log(f"Will attempt to fill empty fields.", verbosity=1)
+        if options['target_page']:
+            self._log(f"Will skip processing until page {options['target_page']}", verbosity=1)
+        if fill_empty_fields:
+            self._log(f"Will attempt to fill empty fields.", verbosity=1)
 
         page_count = 0
         total_processed_count = 0
@@ -344,7 +423,7 @@ class Command(BaseCommand):
                     response_data = client.list_items(page_link=next_page_link)
                     current_api_params_for_log = {'page_link': 'used'}
                 else:
-                    core_api_params = api_params.copy()  # Use configured params
+                    core_api_params = api_params.copy()
                     response_data = client.list_items(limit=limit_per_page, **core_api_params)
                     current_api_params_for_log = {'limit': limit_per_page, **core_api_params}
             except Exception as e:
@@ -377,17 +456,12 @@ class Command(BaseCommand):
                     items_on_page_processed = 0
                     results_iterable = results
                     if TQDM_AVAILABLE and self.verbosity == 1:
-                        # leave=False makes the bar disappear after the loop for the page finishes
                         results_iterable = tqdm(results, desc=f"Page {page_count}", unit="item", leave=False, ncols=100)
 
                     page_start_time = time.time()
                     for item_data in results_iterable:
-                        processed_item, action_taken = self._process_single_item(
-                            item_data, kodik_source, fill_empty_fields
-                        )
-                        # Count item if it resulted in creation, update or error.
-                        # Skipped items (due to unchanged data or API errors) are tracked separately.
-                        # 'skipped_no_match' is not counted towards processed yet.
+                        processed_item, action_taken = self._process_single_item(item_data, kodik_source,
+                                                                                 fill_empty_fields)
                         if action_taken in ['created', 'updated', 'error']:
                             items_on_page_processed += 1
 
@@ -396,20 +470,19 @@ class Command(BaseCommand):
                         elif action_taken == 'updated':
                             total_updated_count += 1
                         elif action_taken == 'skipped':
-                            total_skipped_count += 1  # Only count skips due to unchanged data
+                            total_skipped_count += 1
                         elif action_taken == 'error':
                             total_error_count += 1
 
                     page_duration = time.time() - page_start_time
-                    total_processed_count += items_on_page_processed  # Add processed items from this page
+                    total_processed_count += items_on_page_processed
 
-                    # Clear tqdm bar if it was used
                     if TQDM_AVAILABLE and self.verbosity == 1:
-                        self.stdout.write("\r" + " " * 110 + "\r", ending='')  # Clear line wider than bar
+                        self.stdout.write("\r" + " " * 110 + "\r", ending='')
 
-                    self._log(f"Page {page_count} processed in {page_duration:.2f}s. "
-                              f"Counts: Created={total_created_count}, Updated={total_updated_count}, "
-                              f"Skipped(up-to-date)={total_skipped_count}, Errors={total_error_count}", verbosity=1)
+                    self._log(
+                        f"Page {page_count} processed in {page_duration:.2f}s. Counts: Created={total_created_count}, Updated={total_updated_count}, Skipped(up-to-date)={total_skipped_count}, Errors={total_error_count}",
+                        verbosity=1)
 
             next_page_link = next_page_link_from_response
             if not next_page_link:
