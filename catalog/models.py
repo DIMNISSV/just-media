@@ -376,3 +376,34 @@ class ViewingHistory(models.Model):
                 self.episode = self.link.episode
         elif self.link and self.link.episode is None and self.episode is not None:
             self.episode = None
+
+
+class Favorite(models.Model):
+    """
+    Represents a user's favorited MediaItem.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='favorites',
+        verbose_name=_("User")
+    )
+    media_item = models.ForeignKey(
+        MediaItem,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+        verbose_name=_("Media Item")
+    )
+    added_at = models.DateTimeField(
+        _("Added At"),
+        auto_now_add=True
+    )
+
+    class Meta:
+        verbose_name = _("Favorite")
+        verbose_name_plural = _("Favorites")
+        unique_together = ('user', 'media_item')
+        ordering = ['-added_at']
+
+    def __str__(self):
+        return f"{self.user.username}'s favorite: {self.media_item.title}"
