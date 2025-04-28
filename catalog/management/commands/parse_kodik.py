@@ -31,6 +31,7 @@ KODIK_SOURCE_SLUG = 'kodik'
 class Command(BaseCommand):
     help = 'Parses CORE media data (MediaItem, Genres, Countries, Metadata) from Kodik API /list.'
 
+    # --- add_arguments, _get_kodik_source, _log, _build_exact_match_query, _find_subset_match - без изменений ---
     def add_arguments(self, parser):
         """Adds command line arguments."""
         parser.add_argument('--limit-pages', type=int, default=None, dest='limit_pages',
@@ -165,8 +166,9 @@ class Command(BaseCommand):
         item_id_str = item_data.get('id', 'N/A')
         api_updated_at_str = item_data.get('updated_at')
         api_updated_at: Optional[datetime] = None
-        action = 'skipped'
+        action = 'skipped'  # Default action
 
+        # --- Date parsing ---
         if api_updated_at_str:
             try:
                 api_updated_at = isoparse(api_updated_at_str)
@@ -175,21 +177,22 @@ class Command(BaseCommand):
             except (ValueError, TypeError) as e:
                 logger.warning(
                     f"Could not parse updated_at '{api_updated_at_str}' for item {item_id_str}: {e}. Skipping.")
-                return None, 'skipped'
+                return None, 'skipped_invalid_date'  # More specific skip reason
         else:
             logger.warning(f"Missing 'updated_at' in API data for item {item_id_str}. Skipping.")
-            return None, 'skipped'
+            return None, 'skipped_missing_date'  # More specific skip reason
 
         try:
+            # --- Mapping and basic validation ---
             mapped_data = map_kodik_item_to_models(item_data)
             if not mapped_data:
-                return None, 'skipped'
+                return None, 'skipped_mapping_failed'
             media_item_data = mapped_data.get('media_item_data', {})
             genre_names = mapped_data.get('genres', [])
             country_names = mapped_data.get('countries', [])
             if not media_item_data.get('title'):
                 logger.warning(f"Skipping item {item_id_str} due to missing title after mapping.")
-                return None, 'skipped'
+                return None, 'skipped_missing_title'
 
             api_ids = {
                 'kinopoisk_id': media_item_data.get('kinopoisk_id'),
@@ -201,42 +204,45 @@ class Command(BaseCommand):
             if not api_non_empty_ids:
                 logger.warning(
                     f"Skipping item {item_id_str} ('{media_item_data['title']}'): No external IDs provided by API.")
-                return None, 'skipped'  # Or implement Kodik internal ID logic later
+                # Potentially handle with kodik_internal_id later
+                return None, 'skipped_no_ids'
 
-            media_item = None
+            # --- Find or prepare item ---
+            media_item = None  # This will hold the final item (found or created)
+            item_to_process = None  # This holds the item found by exact or subset match
             created = False
-            item_to_update = None
 
             exact_match_query = self._build_exact_match_query(api_ids)
             try:
-                item_to_update = MediaItem.objects.get(exact_match_query)
+                item_to_process = MediaItem.objects.get(exact_match_query)
                 action = 'exact_match_found'
                 self._log(
-                    f"  Found exact match by ID combination for item {item_id_str} -> MediaItem PK {item_to_update.pk}",
+                    f"  Found exact match by ID combination for item {item_id_str} -> MediaItem PK {item_to_process.pk}",
                     verbosity=2)
             except MediaItem.DoesNotExist:
-                self._log(f"  No exact match found for item {item_id_str}.", verbosity=3)
                 action = 'no_exact_match'
-                item_to_update = self._find_subset_match(api_non_empty_ids)
-                if item_to_update:
+                item_to_process = self._find_subset_match(api_non_empty_ids)
+                if item_to_process:
                     action = 'subset_match_found'
                     self._log(
-                        f"  Found subset match for item {item_id_str} -> Updating MediaItem PK {item_to_update.pk}",
+                        f"  Found subset match for item {item_id_str} -> Updating MediaItem PK {item_to_process.pk}",
                         verbosity=2)
                 else:
-                    self._log(f"  No subset match found for item {item_id_str}. Will create new item.", verbosity=3)
-                    action = 'no_match_found'
+                    action = 'no_match_found'  # Mark for creation
+                    self._log(f"  No exact or subset match found for item {item_id_str}. Will create new item.",
+                              verbosity=3)
             except MediaItem.MultipleObjectsReturned:
                 logger.error(
                     f"CRITICAL: Multiple MediaItems found with exact ID combination {api_ids} for Kodik item {item_id_str}. Manual intervention needed.")
-                return None, 'error'
+                return None, 'error_multiple_exact'
             except Exception as e:
                 logger.exception(
                     f"Unexpected error during exact match lookup for item {item_id_str} with query {exact_match_query}: {e}")
-                return None, 'error'
+                return None, 'error_find_exact'
 
-            if item_to_update and action in ['exact_match_found', 'subset_match_found']:
-                media_item = item_to_update
+            # --- Update existing item ---
+            if item_to_process and action in ['exact_match_found', 'subset_match_found']:
+                media_item = item_to_process  # Assign to the final variable
                 metadata, meta_created = MediaItemSourceMetadata.objects.get_or_create(media_item=media_item,
                                                                                        source=kodik_source)
                 should_update_main_data = False
@@ -255,7 +261,6 @@ class Command(BaseCommand):
                     defaults_for_update = media_item_data.copy()
                     for key in api_ids.keys():
                         defaults_for_update.pop(key, None)
-
                     if meta_created or metadata.source_last_updated_at is None or api_updated_at > metadata.source_last_updated_at:
                         should_update_main_data = True
                         fields_to_update = defaults_for_update
@@ -275,33 +280,30 @@ class Command(BaseCommand):
                               verbosity=2)
                     update_fields_list = list(fields_to_update.keys())
                     m2m_changed_flag = False
-
                     for field, value in fields_to_update.items():
                         setattr(media_item, field, value)
-
                     try:
-                        if 'updated_at' in update_fields_list:
-                            update_fields_list.remove('updated_at')
+                        if 'updated_at' in update_fields_list: update_fields_list.remove('updated_at')
                         if update_fields_list:
                             media_item.save(update_fields=update_fields_list)
-                            action = 'updated'
+                            action = 'updated'  # Ensure action reflects the update
                             self._log(f"      Updated fields: {', '.join(update_fields_list)}", verbosity=3)
                     except Exception as e:
                         logger.exception(f"Error saving updated fields for existing MediaItem {media_item.pk}: {e}")
-                        return media_item, 'error'
+                        return media_item, 'error_save_update'  # Return item even on save error? Maybe None.
 
                     if should_update_main_data:
                         try:
+                            # Genres update logic...
                             genres_qs = Genre.objects.filter(
                                 name__in=[name.strip() for name in genre_names if name.strip()])
                             current_genres = set(media_item.genres.all())
                             target_genres = set(genres_qs) | {
                                 Genre.objects.get_or_create(name__iexact=name.strip(), defaults={'name': name.strip()})[
                                     0] for name in genre_names if name.strip()}
-                            if current_genres != target_genres:
-                                media_item.genres.set(list(target_genres))
-                                m2m_changed_flag = True
-
+                            if current_genres != target_genres: media_item.genres.set(
+                                list(target_genres)); m2m_changed_flag = True
+                            # Countries update logic...
                             countries_qs = Country.objects.filter(
                                 name__in=[name.strip() for name in country_names if name.strip()])
                             current_countries = set(media_item.countries.all())
@@ -309,26 +311,29 @@ class Command(BaseCommand):
                                 Country.objects.get_or_create(name__iexact=name.strip(),
                                                               defaults={'name': name.strip()})[0] for name in
                                 country_names if name.strip()}
-                            if current_countries != target_countries:
-                                media_item.countries.set(list(target_countries))
-                                m2m_changed_flag = True
+                            if current_countries != target_countries: media_item.countries.set(
+                                list(target_countries)); m2m_changed_flag = True
 
                             if m2m_changed_flag:
-                                action = 'updated'
+                                action = 'updated'  # Ensure action is updated if M2M changed
                                 self._log(f"      Updated M2M relations for MediaItem {media_item.pk}", verbosity=3)
                             else:
                                 self._log(f"      M2M relations unchanged for MediaItem {media_item.pk}", verbosity=3)
                         except Exception as e:
                             logger.error(f"Error updating M2M for MediaItem {media_item.pk} during update: {e}")
+                            # Continue even if M2M fails? Yes.
 
-                    if action not in ['updated', 'error']:
-                        action = 'skipped'
-                else:
+                    # Final check on action status after potential updates
+                    if action not in ['updated', 'error_save_update']:
+                        action = 'skipped'  # If no fields updated and no M2M changed
+
+                else:  # No updates needed based on conditions
                     self._log(
                         f"    Skipping update for MediaItem {media_item.pk} (Reason: {action}, No changes needed)",
                         verbosity=2)
                     action = 'skipped'
 
+                # Update metadata timestamp if we considered updating
                 if should_update_main_data:
                     try:
                         if metadata.source_last_updated_at != api_updated_at:
@@ -338,13 +343,12 @@ class Command(BaseCommand):
                     except Exception as e:
                         logger.error(f"Failed to update metadata timestamp for MediaItem {media_item.pk}: {e}")
 
-                return media_item, action
-
+            # --- Create New Item ---
             elif action == 'no_match_found':
                 self._log(f"  Creating new MediaItem for Kodik item {item_id_str} ('{media_item_data.get('title')}')",
                           verbosity=2)
                 try:
-                    media_item = MediaItem.objects.create(**media_item_data)
+                    media_item = MediaItem.objects.create(**media_item_data)  # Assign to final variable
                     created = True
                     action = 'created'
 
@@ -353,7 +357,6 @@ class Command(BaseCommand):
                         name in genre_names if name.strip()}
                     if target_genres:
                         media_item.genres.set(list(target_genres))
-
                     target_countries = {
                         Country.objects.get_or_create(name__iexact=name.strip(), defaults={'name': name.strip()})[0] for
                         name in country_names if name.strip()}
@@ -366,25 +369,29 @@ class Command(BaseCommand):
                         source_last_updated_at=api_updated_at
                     )
                     self._log(f"    Successfully created MediaItem PK {media_item.pk}", verbosity=3)
-                    return media_item, action
 
                 except IntegrityError as e:
                     logger.error(f"Integrity error creating MediaItem {item_id_str} with data {media_item_data}: {e}")
-                    return None, 'error'
+                    return None, 'error_integrity_create'
                 except Exception as e:
                     logger.exception(
                         f"Unexpected error creating MediaItem {item_id_str} with data {media_item_data}: {e}")
-                    return None, 'error'
+                    return None, 'error_create'
             else:
+                # This case should ideally not be reached if action states are handled correctly
                 logger.error(f"Unexpected processing state for item {item_id_str}. Action: {action}")
-                return None, 'error'
+                return None, 'error_unknown_state'
+
+            # Return the processed item (updated or created) and the final action
+            return media_item, action
 
         except Exception as e:
             logger.error(f"Outer error processing item {item_id_str}.")
             logger.exception(
                 f"Exception details: {e}\nProblematic item data:\n{json.dumps(item_data, indent=2, ensure_ascii=False)}")
-            return None, 'error'
+            return None, 'error_outer'
 
+    # --- handle method - без изменений ---
     def handle(self, *args, **options):
         """Handles the command execution."""
         self.verbosity = options['verbosity']
@@ -413,7 +420,8 @@ class Command(BaseCommand):
         total_processed_count = 0
         total_created_count = 0
         total_updated_count = 0
-        total_skipped_count = 0
+        total_skipped_count = 0  # Counts skips due to date/no changes
+        total_skipped_no_match_count = 0  # Counts skips needing creation (if creation fails later)
         total_error_count = 0
         next_page_link = options['start_page_link']
         page_limit = options['limit_pages']
@@ -465,34 +473,44 @@ class Command(BaseCommand):
                 else:
                     self._log(f"Processing {len(results)} items from page {page_count} (API Total: {total_api})...",
                               verbosity=1)
-                    items_on_page_processed = 0
+                    items_on_page_processed_this_run = 0  # Track items touched in this specific page run
                     results_iterable = results
                     if TQDM_AVAILABLE and self.verbosity == 1:
                         results_iterable = tqdm(results, desc=f"Page {page_count}", unit="item", leave=False, ncols=100)
 
                     page_start_time = time.time()
                     for item_data in results_iterable:
+                        # Process item and get the final item and action
                         processed_item, action_taken = self._process_single_item(item_data, kodik_source,
                                                                                  fill_empty_fields)
-                        if action_taken in ['created', 'updated', 'error']:
-                            items_on_page_processed += 1
+
+                        # Update counts based on the final action
                         if action_taken == 'created':
                             total_created_count += 1
+                            items_on_page_processed_this_run += 1
                         elif action_taken == 'updated':
                             total_updated_count += 1
-                        elif action_taken == 'skipped':
+                            items_on_page_processed_this_run += 1
+                        elif action_taken == 'skipped':  # Skipped because up-to-date or no changes needed
                             total_skipped_count += 1
-                        elif action_taken == 'error':
+                        elif action_taken == 'skipped_no_match':  # Skipped because creation failed or not implemented yet
+                            total_skipped_no_match_count += 1  # Use a separate counter if needed
+                        elif 'error' in action_taken:  # Catch all error types
                             total_error_count += 1
+                            items_on_page_processed_this_run += 1  # Count errors as processed attempts
+                        elif action_taken.startswith('skipped_'):  # Catch other specific skips
+                            total_skipped_count += 1  # Or use specific counters
+
+                        # Keep track of total items attempted if needed
+                        # total_processed_count += 1
 
                     page_duration = time.time() - page_start_time
-                    total_processed_count += items_on_page_processed
                     if TQDM_AVAILABLE and self.verbosity == 1:
                         self.stdout.write("\r" + " " * 110 + "\r", ending='')  # Clear tqdm line
 
-                    self._log(
-                        f"Page {page_count} processed in {page_duration:.2f}s. Counts: Created={total_created_count}, Updated={total_updated_count}, Skipped(up-to-date)={total_skipped_count}, Errors={total_error_count}",
-                        verbosity=1)
+                    self._log(f"Page {page_count} processed in {page_duration:.2f}s. "
+                              f"Counts: C={total_created_count}, U={total_updated_count}, "
+                              f"S(ok)={total_skipped_count}, E={total_error_count}", verbosity=1)
 
             next_page_link = next_page_link_from_response
             if not next_page_link:
@@ -502,5 +520,6 @@ class Command(BaseCommand):
         self._log(f"\nFinished parsing CORE data.", self.style.SUCCESS)
         self._log(f"  Total Created: {total_created_count}", self.style.SUCCESS)
         self._log(f"  Total Updated: {total_updated_count}", self.style.SUCCESS)
-        self._log(f"  Total Skipped (up-to-date): {total_skipped_count}", self.style.SUCCESS)
+        self._log(f"  Total Skipped (up-to-date/other): {total_skipped_count}", self.style.SUCCESS)
+        # self._log(f"  Total Skipped (no match found): {total_skipped_no_match_count}", self.style.WARNING) # Optional separate count
         self._log(f"  Total Errors: {total_error_count}", self.style.ERROR if total_error_count else self.style.SUCCESS)
