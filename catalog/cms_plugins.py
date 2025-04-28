@@ -2,13 +2,13 @@
 from cms.plugin_base import CMSPluginBase
 from cms.plugin_pool import plugin_pool
 from django.db import models
+from django.db.models import Max, F, Case, When, Value
 from django.utils.translation import gettext_lazy as _
-from django.db.models import Q, OuterRef, Subquery, Max, F, Case, When, Value
 
 from .models import (
     LatestMediaPluginModel, FeaturedMediaPluginModel, MediaListByCriteriaPluginModel,
     ContinueWatchingPluginModel,  # <-- Add model
-    MediaItem, Genre, Country, ViewingHistory  # <-- Add ViewingHistory
+    MediaItem, ViewingHistory  # <-- Add ViewingHistory
 )
 
 
@@ -83,8 +83,6 @@ class ContinueWatchingPlugin(CMSPluginBase):
     model = ContinueWatchingPluginModel
     name = _("Continue Watching List")
     render_template = "catalog/plugins/continue_watching.html"
-    # Cache per user? This is tricky. Let's disable cache for now.
-    # Cache needs to be user-aware if enabled.
     cache = False
 
     def render(self, context, instance, placeholder):
@@ -92,17 +90,15 @@ class ContinueWatchingPlugin(CMSPluginBase):
         context = super().render(context, instance, placeholder)
         request = context.get('request')
         history_items = []
+        pks_to_fetch = []  # List to store the PKs of the specific history entries
 
-        # Only display for authenticated users
         if request and request.user.is_authenticated:
             user = request.user
 
-            # 1. Find the latest 'watched_at' timestamp for each MediaItem the user interacted with.
-            #    We group by the MediaItem associated with the link (either via episode or direct link).
-            latest_watch_times = ViewingHistory.objects.filter(
+            # 1. Find the latest 'watched_at' for each MediaItem the user interacted with.
+            latest_watch_times_per_item = ViewingHistory.objects.filter(
                 user=user
             ).annotate(
-                # Determine the relevant MediaItem PK based on the link type
                 media_item_pk=Case(
                     When(link__episode__isnull=False, then=F('link__episode__season__media_item__pk')),
                     When(link__media_item__isnull=False, then=F('link__media_item__pk')),
@@ -110,56 +106,78 @@ class ContinueWatchingPlugin(CMSPluginBase):
                     output_field=models.IntegerField()
                 )
             ).filter(
-                media_item_pk__isnull=False  # Ensure we have a media item to group by
+                media_item_pk__isnull=False
             ).values(
-                'media_item_pk'  # Group by the determined media item PK
+                'media_item_pk'
             ).annotate(
-                latest_watched_at=Max('watched_at')  # Find the latest time within each group
+                latest_watched_at=Max('watched_at')
             ).order_by(
-                '-latest_watched_at'  # Order groups by most recent activity
-            )[:instance.items_count]  # Limit the number of groups (MediaItems)
+                '-latest_watched_at'
+            )[:instance.items_count]  # Limit the number of MediaItems
 
-            # Extract the PKs of the latest history entries we care about
-            latest_pks_to_fetch = []
-            if latest_watch_times:
-                # 2. For each MediaItem group, find the specific ViewingHistory entry
-                #    (or entries, if multiple links watched exactly simultaneously)
-                #    that corresponds to the latest 'watched_at' timestamp.
-                subquery = ViewingHistory.objects.filter(
-                    user=user,
-                    watched_at=OuterRef('latest_watched_at'),
-                    # Re-annotate media_item_pk within the subquery for matching
-                    media_item_pk_inner=Case(
+            # Create a dictionary for quick lookup: {media_item_pk: latest_watched_at}
+            latest_times_dict = {
+                item['media_item_pk']: item['latest_watched_at']
+                for item in latest_watch_times_per_item
+            }
+
+            if latest_times_dict:
+                # 2. Fetch all history entries for this user related to the target media items.
+                #    We need to determine the media item PK again for filtering.
+                relevant_history_entries_qs = ViewingHistory.objects.filter(
+                    user=user
+                ).annotate(
+                    # Annotate again to filter based on the keys we found
+                    media_item_pk_for_filter=Case(
                         When(link__episode__isnull=False, then=F('link__episode__season__media_item__pk')),
                         When(link__media_item__isnull=False, then=F('link__media_item__pk')),
                         default=Value(None, output_field=models.IntegerField()),
                         output_field=models.IntegerField()
                     )
                 ).filter(
-                    # Match the media item PK from the outer query
-                    media_item_pk_inner=OuterRef('media_item_pk')
-                )
+                    media_item_pk_for_filter__in=latest_times_dict.keys()
+                ).select_related(  # Select related needed for the loop below
+                    'link__episode__season__media_item',
+                    'link__media_item'
+                ).order_by('-watched_at')  # Order by watched_at to process latest first
 
-                # We want the PKs of these latest history entries
-                history_pks_subquery = subquery.values('pk')[:1]  # Get pk of one entry per group
+                # 3. Iterate through these entries in Python to find the exact latest one for each media item.
+                pks_to_fetch_set = set()
+                processed_media_items = set()
 
-                # Fetch the actual ViewingHistory objects using the PKs determined
-                latest_pks_to_fetch = ViewingHistory.objects.filter(
-                    pk__in=Subquery(history_pks_subquery.filter(media_item_pk=OuterRef('media_item_pk')))
-                ).values_list('pk', flat=True)
+                for entry in relevant_history_entries_qs:
+                    media_item_pk = None
+                    if entry.link.episode:
+                        media_item_pk = entry.link.episode.season.media_item_id
+                    elif entry.link.media_item:
+                        media_item_pk = entry.link.media_item_id
 
-            # 3. Fetch the actual ViewingHistory objects with all related data needed for the template
-            if latest_pks_to_fetch:
+                    # Check if it's a target media item and the time matches the latest known time for it
+                    if (media_item_pk in latest_times_dict and
+                            entry.watched_at == latest_times_dict[media_item_pk] and
+                            media_item_pk not in processed_media_items):
+                        pks_to_fetch_set.add(entry.pk)
+                        processed_media_items.add(media_item_pk)  # Mark this media item as processed
+
+                    # Optimization: Stop if we've found entries for all items
+                    if len(processed_media_items) == len(latest_times_dict):
+                        break
+
+                pks_to_fetch = list(pks_to_fetch_set)
+
+            # 4. Fetch the final ViewingHistory objects with all related data needed for the template
+            if pks_to_fetch:
                 history_items = ViewingHistory.objects.filter(
-                    pk__in=list(latest_pks_to_fetch)  # Use the PKs we found
+                    pk__in=pks_to_fetch
                 ).select_related(
                     'link__translation',
-                    'link__episode__season__media_item',  # Needed for title, poster etc. via episode
-                    'link__media_item',  # Needed for title, poster etc. via direct link
-                    'episode',  # Explicit episode link
+                    'link__episode__season__media_item',
+                    'link__media_item',
+                    'episode',
                 ).prefetch_related(
-                    # Prefetch screenshots if needed for display
                     'link__episode__screenshots',
+                    'link__media_item__genres',
+                    'link__episode__season__media_item__genres'
                 ).order_by('-watched_at')  # Final ordering for display
 
         context['history_items'] = history_items
