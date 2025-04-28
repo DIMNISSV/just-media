@@ -319,7 +319,6 @@ class MediaListByCriteriaPluginModel(CMSPlugin):
     )
 
     def __str__(self):
-        # *** MODIFIED: Use str() to evaluate the lazy translation ***
         return self.title or str(_("Media List by Criteria"))
 
     def copy_relations(self, oldinstance):
