@@ -3,12 +3,19 @@ import json
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, Prefetch
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import ListView, DetailView
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import ListView, DetailView, View
 
 from .forms import AdvancedMediaSearchForm
-from .models import MediaItem, MediaSourceLink, Season, Episode
+from .models import (
+    MediaItem, MediaSourceLink, Season, Episode, ViewingHistory
+)
 
 
 class MediaItemListView(ListView):
@@ -233,3 +240,61 @@ class MediaItemSearchView(ListView):
         context['search_form'] = AdvancedMediaSearchForm(self.request.GET or None)
         context['query_params'] = self.request.GET.urlencode()
         return context
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TrackWatchView(LoginRequiredMixin, View):
+    """
+    Handles POST requests from the frontend to record viewing history.
+    Requires the user to be logged in.
+    Expects 'link_pk' in the POST data.
+    """
+    http_method_names = ['post']  # Only allow POST
+
+    def post(self, request, *args, **kwargs):
+        """
+        Creates or updates a ViewingHistory record for the logged-in user
+        and the provided MediaSourceLink primary key.
+        """
+        link_pk = request.POST.get('link_pk')
+        # Optional: Get progress later
+        # progress = request.POST.get('progress')
+
+        if not link_pk:
+            return HttpResponseBadRequest("Missing 'link_pk' parameter.")
+
+        try:
+            link_pk = int(link_pk)
+        except (ValueError, TypeError):
+            return HttpResponseBadRequest("Invalid 'link_pk' parameter.")
+
+        # Find the link object
+        source_link = get_object_or_404(
+            MediaSourceLink.objects.select_related('episode'),  # Select episode for history record
+            pk=link_pk
+        )
+
+        # Prepare defaults for update_or_create
+        # 'watched_at' will be updated automatically by auto_now=True
+        defaults = {
+            'episode': source_link.episode  # Set or unset episode based on link
+            # Add progress later: 'progress_seconds': progress_seconds
+        }
+
+        try:
+            # Use update_or_create to handle both new and existing entries efficiently
+            # The unique_together constraint on ('user', 'link') ensures we update the correct record
+            history_entry, created = ViewingHistory.objects.update_or_create(
+                user=request.user,
+                link=source_link,
+                defaults=defaults
+            )
+            action = "created" if created else "updated"
+            print(
+                f"Viewing history {action} for user {request.user.username}, link {link_pk}, episode {source_link.episode}")  # Debug log
+            return JsonResponse({'status': 'success', 'action': action})
+
+        except Exception as e:
+            # Log the exception for debugging
+            print(f"Error saving viewing history: {e}")  # Basic logging
+            return JsonResponse({'status': 'error', 'message': 'Internal server error'}, status=500)

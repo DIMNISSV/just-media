@@ -2,7 +2,7 @@
 {% extends "base.html" %}
 {% load i18n static l10n %}
 
-{% block title %}{{ media_item.title }} - {{ block.super }}{% endblock title %}
+{% block title %}{{ media_item.title }} - {% trans "Catalog" %} - {{ block.super }}{% endblock title %}
 
 {% block content %}
     <div class="container mt-3">
@@ -87,6 +87,9 @@
 
             {# --- Watch Tab Pane --- #}
             <div class="tab-pane fade" id="watch-pane" role="tabpanel" aria-labelledby="watch-tab" tabindex="0">
+                {# *** ADDED CSRF token INSIDE the watch-pane for JS fetch *** #}
+                {% csrf_token %}
+
                 {# --- Layout Controls --- #}
                 <div class="d-flex justify-content-end mb-4">
                     <div class="btn-group btn-group-sm" role="group" aria-label="Player layout selection">
@@ -114,7 +117,6 @@
 
                         <input type="radio" class="btn-check" name="playerLayout" id="layoutPlayerOnly"
                                value="player_only" autocomplete="off" {% if not has_main_links %}disabled{% endif %}>
-                        {# Title is now managed by JS via checkPlayerOnlyAvailability #}
                         <label class="btn btn-outline-secondary {% if not has_main_links %}disabled opacity-50{% endif %}"
                                for="layoutPlayerOnly">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
@@ -131,19 +133,13 @@
 
                     {# --- Player Column --- #}
                     <div id="player-container-column" class="col-12"> {# JS changes classes #}
-                        {# Player Placeholder - JS fills this #}
                         <div id="player-placeholder" class="mb-3" style="min-height: 100px;">
-                            {# Initial placeholder text, JS will update it #}
                             <div class="text-center text-muted border rounded p-5">{% trans "Select an episode or translation to start watching" %}</div>
                         </div>
-                        {# Translation Selector - JS fills the buttons container #}
                         <div id="translation-selector-placeholder" class="mb-3">
-                            {# Static label, shown/hidden by JS #}
                             <span class="me-2 small translation-label"
                                   style="display: none;">{% trans "Translation" %}:</span>
-                            {# Buttons added here by JS #}
                             <span id="translation-buttons-container"></span>
-                            {# Message shown/hidden by JS #}
                             <span id="no-translations-message" class="text-warning small"
                                   style="display: none;">{% trans "No translations available." %}</span>
                         </div>
@@ -151,10 +147,8 @@
                     {# --- End Player Column --- #}
 
                     {# --- Episodes Column --- #}
-                    {# JS adds/removes d-none, margin classes, SCROLL_CLASS, LIST_VIEW_CLASS #}
                     <div id="episodes-container-column" class="col-12"> {# JS changes classes #}
                         {% if media_item.prefetched_seasons %}
-                            {# Container for Nav Buttons and Title - JS shows/hides this #}
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <button id="prev-episode-btn" class="btn btn-outline-secondary btn-sm" type="button"
                                         disabled> « {% trans "Previous" %}</button>
@@ -164,7 +158,6 @@
                                 </button>
                             </div>
 
-                            {# Season Tabs #}
                             <ul class="nav nav-tabs mb-3 nav-tabs-sm" id="seasons-tab" role="tablist">
                                 {% for season in media_item.prefetched_seasons %}
                                     <li class="nav-item" role="presentation">
@@ -177,7 +170,6 @@
                                 {% endfor %}
                             </ul>
 
-                            {# Season Tab Content #}
                             <div class="tab-content" id="seasons-tab-content"
                                  data-media-pk="{{ media_item.pk|unlocalize }}">
                                 {% for season in media_item.prefetched_seasons %}
@@ -185,17 +177,15 @@
                                          id="season-pane-{{ season.pk|unlocalize }}" role="tabpanel"
                                          aria-labelledby="season-tab-{{ season.pk|unlocalize }}" tabindex="0">
                                         {% if season.prefetched_episodes %}
-                                            {# episodes-grid container is always present, CSS changes its behavior via LIST_VIEW_CLASS on parent #}
                                             <div class="episodes-grid row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-2">
-                                                {# Grid classes for default view #}
                                                 {% for episode in season.prefetched_episodes %}
                                                     <div class="col">
-                                                        <a href="#"
-                                                           class="episode-selector card text-decoration-none"
+                                                        <a href="#" class="episode-selector card text-decoration-none"
                                                            data-episode-pk="{{ episode.pk|unlocalize }}"
                                                            data-episode-num="{{ episode.episode_number|unlocalize }}"
                                                            data-season-num="{{ season.season_number|unlocalize }}"
                                                            title="
+                                                                   
                                                                    {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}">
                                                             {% with first_screenshot=episode.screenshots.first %}
                                                                 {% if first_screenshot %}
@@ -244,9 +234,11 @@
 
     {# --- Data Templates --- #}
     <template id="player-url-template" data-url="{% url 'catalog:play_source_link' pk=0 %}"></template>
+    <template id="track-watch-history-url" data-url="{% url 'catalog:track_watch_history' %}"></template>
+    <template id="user-auth-status" data-is-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"></template>
+
     <script id="episodes-links-data" type="application/json">{{ episodes_links_json|safe }}</script>
     <script id="main-links-data" type="application/json">{{ main_links_json|safe }}</script>
-    {# Add script tag for JS translations #}
     <script id="js-translations-data" type="application/json">{{ js_translations|safe }}</script>
     {# --- End Data Templates --- #}
 

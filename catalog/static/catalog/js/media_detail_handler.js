@@ -15,6 +15,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const episodesLinksDataElement = document.getElementById('episodes-links-data');
     const mainLinksDataElement = document.getElementById('main-links-data');
     const jsTranslationsElement = document.getElementById('js-translations-data'); // Get translations
+    const trackHistoryUrlElement = document.getElementById('track-watch-history-url'); // Get URL from template
+    const userAuthStatusElement = document.getElementById('user-auth-status'); // Get auth status
+    const csrfTokenInput = document.querySelector('#watch-pane input[name="csrfmiddlewaretoken"]'); // Get CSRF from watch pane
+
     const mediaPk = document.getElementById('seasons-tab-content')?.dataset.mediaPk;
     const watchAreaRow = document.getElementById('watch-area-row');
     const playerContainerColumn = document.getElementById('player-container-column');
@@ -30,6 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let mainLinksData = {};
     let jsTranslations = {}; // Store JS translations
     let currentLayout = 'episodes_below';
+    let isUserAuthenticated = false;
+    let trackHistoryUrl = null;
+    let csrfToken = null;
 
     // --- Constants ---
     const LAST_EPISODE_KEY = mediaPk ? `last_watched_episode_${mediaPk}` : null;
@@ -72,12 +79,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Function to track watch history ---
+    function trackWatchHistory(linkPk) {
+        if (!isUserAuthenticated) {
+            console.log("History tracking skipped: User not authenticated.");
+            return; // Don't track for anonymous users
+        }
+        if (!trackHistoryUrl) {
+            console.warn("History tracking skipped: Tracking URL not found in template.");
+            return;
+        }
+        if (!csrfToken) {
+            console.error("History tracking failed: CSRF token not found.");
+            return; // Can't make POST without CSRF
+        }
+        if (!linkPk) {
+            console.warn("History tracking skipped: Invalid link PK.");
+            return;
+        }
+
+        console.log(`Tracking watch history for link PK: ${linkPk}`);
+
+        const formData = new FormData();
+        formData.append('link_pk', linkPk);
+
+        fetch(trackHistoryUrl, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest', // Optional: Mark as AJAX
+            },
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) {
+                    // Throw error to be caught below
+                    throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log(`Watch history ${data.action} successfully for link PK: ${linkPk}`);
+                } else {
+                    console.warn(`History tracking backend response indicates failure for link PK ${linkPk}:`, data);
+                }
+            })
+            .catch(error => {
+                console.error(`Error tracking watch history for link PK ${linkPk}:`, error);
+            });
+    }
+
     // --- Core Logic Functions ---
     function loadPlayer(linkPk, translationIdToSave, startFrom = null) {
         const playerUrl = generatePlayerUrl(linkPk);
         console.log(`Attempting to load player for link PK: ${linkPk}, Translation ID: ${translationIdToSave}, URL: ${playerUrl}, StartFrom: ${startFrom}`);
         if (playerUrl && playerPlaceholder) {
             playerPlaceholder.innerHTML = `<div class="player-container"><iframe src="${playerUrl}" allowfullscreen="allowfullscreen" webkitallowfullscreen="webkitallowfullscreen" mozallowfullscreen="mozallowfullscreen" loading="eager"></iframe></div>`;
+
+            // --- Call history tracking ---
+            trackWatchHistory(linkPk);
+            // -----------------------------
 
             if (LAST_TRANSLATION_KEY && translationIdToSave) {
                 localStorage.setItem(LAST_TRANSLATION_KEY, translationIdToSave);
@@ -105,7 +167,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             console.error('Could not generate player URL or player placeholder not found.');
-            // Use translated error message
             setPlaceholderText('error_loading_player');
         }
     }
@@ -169,7 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             noTranslationsMessage.textContent = jsTranslations['no_translations_for_episode'] || "No translations available."; // Set text content
             noTranslationsMessage.style.display = '';
-            // Use translated placeholder text
             setPlaceholderText('no_content_available');
             return null;
         }
@@ -321,7 +381,6 @@ document.addEventListener('DOMContentLoaded', () => {
             highlightTranslationButton(translationButton);
         } else {
             console.log(`No translation link to load for episode PK ${episodePk}`);
-            // Use translated placeholder text
             setPlaceholderText('no_translations_for_episode');
             currentSelectedTranslationId = null;
             highlightTranslationButton(null);
@@ -349,7 +408,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const mainTranslationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${mainTranslationLink.link_pk}']`);
                 highlightTranslationButton(mainTranslationButton);
             } else {
-                // Use translated placeholder text
                 setPlaceholderText('select_translation');
                 highlightTranslationButton(null);
             }
@@ -359,7 +417,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Restore Watched State: Checking for last episode...");
         if (!LAST_EPISODE_KEY) {
             console.log("Restore Watched State: No episode key defined.");
-            // Use translated placeholder text
             setPlaceholderText('select_episode_or_translation');
             return;
         }
@@ -390,14 +447,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 console.log(`Restore Watched State: Could not find last watched episode element (PK ${lastEpisodePk}) in DOM.`);
-                // Use translated placeholder text
                 setPlaceholderText('select_episode');
                 displayTranslationOptions(null, null);
                 highlightEpisode(null);
             }
         } else {
             console.log("Restore Watched State: No last watched episode found in localStorage.");
-            // Use translated placeholder text
             setPlaceholderText('select_episode');
             displayTranslationOptions(null, null);
             highlightEpisode(null);
@@ -517,7 +572,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const mainTranslationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${mainTranslationLink.link_pk}']`);
                     highlightTranslationButton(mainTranslationButton);
                 } else {
-                    // Use translated placeholder text
                     setPlaceholderText('select_translation');
                     highlightTranslationButton(null);
                 }
@@ -528,7 +582,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (lastEpisodeElement) {
                     handleEpisodeSelection(lastEpisodeElement, false);
                 } else {
-                    // Use translated placeholder text
                     setPlaceholderText('select_episode');
                     displayTranslationOptions(null, null);
                     highlightEpisode(null);
@@ -568,12 +621,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log("Disabling player_only layout option: No main links found.");
                 playerOnlyRadio.disabled = true;
                 playerOnlyLabel.classList.add('disabled', 'opacity-50');
-                // Use translated text
                 playerOnlyLabel.setAttribute('title', jsTranslations['player_only_unavailable'] || 'Player only unavailable');
             } else {
                 playerOnlyRadio.disabled = false;
                 playerOnlyLabel.classList.remove('disabled', 'opacity-50');
-                // Use translated text
                 playerOnlyLabel.setAttribute('title', jsTranslations['player_only_enabled'] || 'Player only');
             }
         }
@@ -657,7 +708,12 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("Media detail handler initializing...");
     episodesLinksData = parseJsonData(episodesLinksDataElement, 'Episodes links');
     mainLinksData = parseJsonData(mainLinksDataElement, 'Main links');
-    jsTranslations = parseJsonData(jsTranslationsElement, 'JS Translations'); // Parse translations
+    jsTranslations = parseJsonData(jsTranslationsElement, 'JS Translations');
+    // Get Track History URL and Auth Status
+    trackHistoryUrl = trackHistoryUrlElement?.dataset.url;
+    isUserAuthenticated = userAuthStatusElement?.dataset.isAuthenticated === 'true';
+    csrfToken = csrfTokenInput?.value; // Get CSRF token once
+
     checkPlayerOnlyAvailability();
     initializeLayout();
     restoreLastDetailTab();
@@ -665,6 +721,6 @@ document.addEventListener('DOMContentLoaded', () => {
         restoreLastWatchedState();
     }, 50);
     updateNavButtons();
-    console.log("Media detail handler initialization complete.");
+    console.log("Media detail handler initialization complete. Auth Status:", isUserAuthenticated, "Track URL:", trackHistoryUrl, "CSRF Found:", !!csrfToken);
 
 }); // End DOMContentLoaded
