@@ -407,3 +407,25 @@ class Favorite(models.Model):
 
     def __str__(self):
         return f"{self.user.username}'s favorite: {self.media_item.title}"
+
+
+class ContinueWatchingPluginModel(CMSPlugin):
+    """
+    Model for the 'Continue Watching' CMS plugin.
+    Stores the number of items to display.
+    """
+    title = models.CharField(
+        _("Title"),
+        max_length=150,
+        blank=True,
+        default=_("Continue Watching"),
+        help_text=_("Optional title for this section.")
+    )
+    items_count = models.PositiveIntegerField(
+        _("Number of items"),
+        default=5,
+        help_text=_("Maximum number of different shows/movies to display.")
+    )
+
+    def __str__(self):
+        return self.title or str(_("Continue Watching List"))

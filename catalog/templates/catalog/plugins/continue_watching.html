@@ -1,0 +1,71 @@
+{# catalog/templates/catalog/plugins/continue_watching.html #}
+{% load i18n static l10n %}
+
+{% if user.is_authenticated %} {# Render only for logged-in users #}
+    <div class="continue-watching-plugin mb-4">
+        {% if title %}<h3 class="h5">{{ title }}</h3>{% endif %}
+
+        {% if history_items %}
+            <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-3">
+                {% for history_entry in history_items %}
+                    {% with media_item=history_entry.link.episode.season.media_item|default:history_entry.link.media_item %}
+                        {# Determine the media item based on the link type #}
+                        {% if media_item %} {# Ensure we have a media item to display #}
+                            <div class="col">
+                                <div class="card h-100 shadow-sm media-list-card position-relative">
+                                    <a href="{% url 'catalog:mediaitem_detail' pk=media_item.pk %}"
+                                       class="text-decoration-none">
+                                        {% if media_item.poster_url %}
+                                            <img src="{{ media_item.poster_url }}" class="card-img-top"
+                                                 alt="{% blocktrans with title=media_item.title %}Poster for {{ title }}{% endblocktrans %}"
+                                                 loading="lazy">
+                                        {% else %}
+                                            <div class="card-img-top d-flex align-items-center justify-content-center bg-light text-muted"
+                                                 style="aspect-ratio: 2 / 3;">
+                                                <small>{% trans "No Poster" %}</small>
+                                            </div>
+                                        {% endif %}
+                                    </a>
+                                    <div class="card-body p-2 d-flex flex-column">
+                                        <h6 class="card-title mb-1 flex-grow-1" style="font-size: 0.9rem;">
+                                            <a href="{% url 'catalog:mediaitem_detail' pk=media_item.pk %}"
+                                               class="text-decoration-none link-dark stretched-link">{{ media_item.title|truncatechars:50 }}</a>
+                                        </h6>
+                                        {# Display Episode/Translation Info #}
+                                        <div class="mt-auto small text-muted">
+                                            {% if history_entry.episode %}
+                                                {% blocktrans with season_num=history_entry.episode.season.season_number episode_num=history_entry.episode.episode_number %}
+                                                    S{{ season_num }} E{{ episode_num }}
+                                                {% endblocktrans %}
+                                            {% else %}
+                                                {% trans "(Main Item)" %}
+                                            {% endif %}
+                                            {% if history_entry.link.translation %}
+                                                <br>
+                                                <small>({{ history_entry.link.translation.title|truncatechars:30 }})</small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {# Optional: Add a direct link to the specific player link watched #}
+                                    {# Ensure the link URL is correct #}
+                                    <a href="{% url 'catalog:play_source_link' pk=history_entry.link.pk %}"
+                                       class="btn btn-sm btn-primary position-absolute bottom-0 end-0 m-1"
+                                       style="font-size: 0.7rem; padding: 0.1rem 0.3rem;"
+                                       title="{% trans 'Continue watching' %}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+                                             fill="currentColor" class="bi bi-play-fill" viewBox="0 0 16 16">
+                                            <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393"/>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endwith %}
+                {% endfor %}
+            </div>
+        {% else %}
+            {# Message shown if the user is logged in but has no history yet #}
+            <p class="text-muted">{% trans "Your viewing history is empty." %}</p>
+        {% endif %}
+    </div>
+{% endif %} {# End user.is_authenticated check #}
