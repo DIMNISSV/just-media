@@ -82,11 +82,10 @@ class MediaItem(models.Model):
     description = models.TextField(_("Description"), blank=True, null=True)
     poster_url = models.URLField(_("Poster URL"), max_length=1024, blank=True, null=True)
 
-    kinopoisk_id = models.CharField(_("Kinopoisk ID"), max_length=20, unique=True, blank=True, null=True, db_index=True)
-    imdb_id = models.CharField(_("IMDb ID"), max_length=20, unique=True, blank=True, null=True, db_index=True)
-    shikimori_id = models.CharField(_("Shikimori ID"), max_length=20, unique=True, blank=True, null=True, db_index=True)
-    mydramalist_id = models.CharField(_("MyDramaList ID"), max_length=20, unique=True, blank=True, null=True,
-                                      db_index=True)
+    kinopoisk_id = models.CharField(_("Kinopoisk ID"), max_length=20, blank=True, null=True, db_index=True)
+    imdb_id = models.CharField(_("IMDb ID"), max_length=20, blank=True, null=True, db_index=True)
+    shikimori_id = models.CharField(_("Shikimori ID"), max_length=20, blank=True, null=True, db_index=True)
+    mydramalist_id = models.CharField(_("MyDramaList ID"), max_length=20, blank=True, null=True, db_index=True)
 
     genres = models.ManyToManyField(Genre, verbose_name=_("Genres"), blank=True, related_name="media_items")
     countries = models.ManyToManyField(Country, verbose_name=_("Countries"), blank=True, related_name="media_items")
@@ -98,16 +97,6 @@ class MediaItem(models.Model):
         verbose_name = _("Media Item")
         verbose_name_plural = _("Media Items")
         ordering = ['-updated_at', 'title']
-        constraints = [
-            models.UniqueConstraint(fields=['kinopoisk_id'], name='unique_kinopoisk_id',
-                                    condition=models.Q(kinopoisk_id__isnull=False)),
-            models.UniqueConstraint(fields=['imdb_id'], name='unique_imdb_id',
-                                    condition=models.Q(imdb_id__isnull=False)),
-            models.UniqueConstraint(fields=['shikimori_id'], name='unique_shikimori_id',
-                                    condition=models.Q(shikimori_id__isnull=False)),
-            models.UniqueConstraint(fields=['mydramalist_id'], name='unique_mydramalist_id',
-                                    condition=models.Q(mydramalist_id__isnull=False)),
-        ]
 
     def __str__(self):
         year_str = f" ({self.release_year})" if self.release_year else ""
