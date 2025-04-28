@@ -1,6 +1,7 @@
 # catalog/models.py
 # Import CMSPlugin for plugin models
 from cms.models.pluginmodel import CMSPlugin
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import reverse
@@ -325,3 +326,84 @@ class MediaListByCriteriaPluginModel(CMSPlugin):
         """Ensure M2M relations are copied when plugin is copied."""
         self.genres.set(oldinstance.genres.all())
         self.countries.set(oldinstance.countries.all())
+
+
+class ViewingHistory(models.Model):
+    """
+    Tracks which episode/translation a user has watched and when.
+    Uses update_or_create logic on (user, episode, link) to store the latest watch time.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='viewing_history',
+        verbose_name=_("User")
+    )
+    link = models.ForeignKey(
+        MediaSourceLink,
+        on_delete=models.CASCADE,
+        related_name='viewing_history',
+        verbose_name=_("Watched Link")
+    )
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name='viewing_history',
+        verbose_name=_("Episode"),
+        null=True, blank=True
+    )
+    watched_at = models.DateTimeField(
+        _("Watched At"),
+        auto_now=True,
+        db_index=True
+    )
+
+    class Meta:
+        verbose_name = _("Viewing History Entry")
+        verbose_name_plural = _("Viewing History")
+        unique_together = ('user', 'link')
+        ordering = ['-watched_at']
+
+    def __str__(self):
+        episode_str = f" - Ep {self.link.episode.episode_number}" if self.link.episode else " (Main Item)"
+        translation_str = f" ({self.link.translation.title})" if self.link.translation else ""
+        return f"{self.user.username} watched {self.link.episode.season.media_item.title}{episode_str}{translation_str} at {self.watched_at.strftime('%Y-%m-%d %H:%M')}"
+
+    def clean(self):
+        """Ensure episode field matches the episode in the link, if link has one."""
+        if self.link and self.link.episode != self.episode:
+            if self.link.episode:
+                self.episode = self.link.episode
+        elif self.link and self.link.episode is None and self.episode is not None:
+            self.episode = None
+
+
+class Favorite(models.Model):
+    """
+    Represents a user's favorited MediaItem.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='favorites',
+        verbose_name=_("User")
+    )
+    media_item = models.ForeignKey(
+        MediaItem,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+        verbose_name=_("Media Item")
+    )
+    added_at = models.DateTimeField(
+        _("Added At"),
+        auto_now_add=True
+    )
+
+    class Meta:
+        verbose_name = _("Favorite")
+        verbose_name_plural = _("Favorites")
+        unique_together = ('user', 'media_item')
+        ordering = ['-added_at']
+
+    def __str__(self):
+        return f"{self.user.username}'s favorite: {self.media_item.title}"

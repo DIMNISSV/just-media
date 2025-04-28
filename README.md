@@ -48,7 +48,7 @@ A Django CMS-based project for browsing and viewing media content, utilizing the
         KODIK_API_TOKEN='your_kodik_api_token'
         DEBUG=True # Set to False for production
         ```
-
+    *   You can use this command: `python -c "import secrets; print(secrets.token_urlsafe(64))"`
 5.  **Apply database migrations:**
     ```bash
     python manage.py migrate

@@ -4,9 +4,9 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from .models import (
-    Genre, Country, Source, Translation, 
+    Genre, Country, Source, Translation,
     MediaItem, Season, Episode, MediaSourceLink,
-    MediaItemSourceMetadata, Screenshot
+    MediaItemSourceMetadata, Screenshot, Favorite
 )
 
 
@@ -103,13 +103,13 @@ class EpisodeAdmin(admin.ModelAdmin):
 @admin.register(MediaSourceLink)
 class MediaSourceLinkAdmin(admin.ModelAdmin):
     list_display = (
-        'get_target_str', 'source', 'quality_info', 'translation', 'added_at', 'last_seen_at') 
+        'get_target_str', 'source', 'quality_info', 'translation', 'added_at', 'last_seen_at')
     list_filter = (
-        'source', 'quality_info', 'translation', 'added_at', 'last_seen_at') 
+        'source', 'quality_info', 'translation', 'added_at', 'last_seen_at')
     search_fields = ('media_item__title', 'episode__title', 'player_link', 'source_specific_id',
-                     'translation__title') 
-    readonly_fields = ('added_at', 'last_seen_at') 
-    autocomplete_fields = ['media_item', 'episode', 'source', 'translation'] 
+                     'translation__title')
+    readonly_fields = ('added_at', 'last_seen_at')
+    autocomplete_fields = ['media_item', 'episode', 'source', 'translation']
 
     @admin.display(description='Target')
     def get_target_str(self, obj):
@@ -176,3 +176,16 @@ class ScreenshotAdmin(admin.ModelAdmin):
         if obj.url:
             return format_html('<a href="{0}" target="_blank"><img src="{0}" height="50" /></a>', obj.url)
         return ""
+
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    """
+    Admin interface for Favorite items.
+    """
+    list_display = ('user', 'media_item', 'added_at')
+    list_filter = ('user', 'added_at')
+    search_fields = ('user__username', 'media_item__title')
+    autocomplete_fields = ('user', 'media_item')  # Use autocomplete for easier selection
+    date_hierarchy = 'added_at'
+    list_per_page = 25

@@ -6,15 +6,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const nextEpisodeBtn = document.getElementById('next-episode-btn');
     const prevEpisodeBtn = document.getElementById('prev-episode-btn');
     const playerUrlTemplateEl = document.getElementById('player-url-template');
-    // Translation elements
     const translationSelectorPlaceholder = document.getElementById('translation-selector-placeholder');
     const translationLabel = translationSelectorPlaceholder?.querySelector('.translation-label');
     const translationButtonsContainer = document.getElementById('translation-buttons-container');
     const noTranslationsMessage = document.getElementById('no-translations-message');
-    // ---
     const episodesLinksDataElement = document.getElementById('episodes-links-data');
     const mainLinksDataElement = document.getElementById('main-links-data');
-    const jsTranslationsElement = document.getElementById('js-translations-data'); // Get translations
+    const jsTranslationsElement = document.getElementById('js-translations-data');
+    const trackHistoryUrlElement = document.getElementById('track-watch-history-url');
+    const userAuthStatusElement = document.getElementById('user-auth-status');
+    const csrfTokenInput = document.querySelector('#watch-pane input[name="csrfmiddlewaretoken"]') || document.querySelector('input[name="csrfmiddlewaretoken"]'); // More robust CSRF finding
     const mediaPk = document.getElementById('seasons-tab-content')?.dataset.mediaPk;
     const watchAreaRow = document.getElementById('watch-area-row');
     const playerContainerColumn = document.getElementById('player-container-column');
@@ -22,14 +23,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const layoutRadios = document.querySelectorAll('input[name="playerLayout"]');
     const playerOnlyRadio = document.getElementById('layoutPlayerOnly');
     const playerOnlyLabel = document.querySelector('label[for="layoutPlayerOnly"]');
+    const favoriteToggleButton = document.querySelector('.favorite-toggle-btn'); // Favorite button
 
     // --- State Variables ---
     let currentEpisodeElement = null;
     let currentSelectedTranslationId = null;
     let episodesLinksData = {};
     let mainLinksData = {};
-    let jsTranslations = {}; // Store JS translations
+    let jsTranslations = {};
     let currentLayout = 'episodes_below';
+    let isUserAuthenticated = false;
+    let trackHistoryUrl = null;
+    let toggleFavoriteUrl = null; // URL for toggling favorite
+    let csrfToken = null;
 
     // --- Constants ---
     const LAST_EPISODE_KEY = mediaPk ? `last_watched_episode_${mediaPk}` : null;
@@ -64,21 +70,69 @@ document.addEventListener('DOMContentLoaded', () => {
         return linkData?.start_from ?? null;
     }
 
-    // --- Placeholder Text Function ---
     function setPlaceholderText(textKey) {
         if (playerPlaceholder) {
-            const text = jsTranslations[textKey] || "Loading..."; // Fallback text
+            const text = jsTranslations[textKey] || "Loading...";
             playerPlaceholder.innerHTML = `<div class="text-center text-muted border rounded p-5">${text}</div>`;
         }
     }
 
+    function getCsrfToken() {
+        return csrfTokenInput?.value;
+    } // Helper to get CSRF
+
+    // --- Function to track watch history ---
+    function trackWatchHistory(linkPk) {
+        if (!isUserAuthenticated) {
+            console.log("History tracking skipped: User not authenticated.");
+            return;
+        }
+        if (!trackHistoryUrl) {
+            console.warn("History tracking skipped: Tracking URL not found.");
+            return;
+        }
+        const currentCsrf = getCsrfToken();
+        if (!currentCsrf) {
+            console.error("History tracking failed: CSRF token not found.");
+            return;
+        }
+        if (!linkPk) {
+            console.warn("History tracking skipped: Invalid link PK.");
+            return;
+        }
+        console.log(`Tracking watch history for link PK: ${linkPk}`);
+        const formData = new FormData();
+        formData.append('link_pk', linkPk);
+        fetch(trackHistoryUrl, {
+            method: 'POST',
+            headers: {'X-CSRFToken': currentCsrf, 'X-Requested-With': 'XMLHttpRequest'},
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log(`Watch history ${data.action} successfully for link PK: ${linkPk}`);
+                } else {
+                    console.warn(`History tracking backend response indicates failure for link PK ${linkPk}:`, data);
+                }
+            })
+            .catch(error => {
+                console.error(`Error tracking watch history for link PK ${linkPk}:`, error);
+            });
+    }
+
     // --- Core Logic Functions ---
-    function loadPlayer(linkPk, translationIdToSave, startFrom = null) {
+    function loadPlayer(linkPk, translationIdToSave, startFrom = null) { /* ... no changes except trackWatchHistory call ... */
         const playerUrl = generatePlayerUrl(linkPk);
         console.log(`Attempting to load player for link PK: ${linkPk}, Translation ID: ${translationIdToSave}, URL: ${playerUrl}, StartFrom: ${startFrom}`);
         if (playerUrl && playerPlaceholder) {
             playerPlaceholder.innerHTML = `<div class="player-container"><iframe src="${playerUrl}" allowfullscreen="allowfullscreen" webkitallowfullscreen="webkitallowfullscreen" mozallowfullscreen="mozallowfullscreen" loading="eager"></iframe></div>`;
-
+            trackWatchHistory(linkPk); // Call history tracking
             if (LAST_TRANSLATION_KEY && translationIdToSave) {
                 localStorage.setItem(LAST_TRANSLATION_KEY, translationIdToSave);
                 currentSelectedTranslationId = translationIdToSave.toString();
@@ -91,7 +145,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (!currentEpisodeElement && LAST_EPISODE_KEY && currentLayout === 'player_only') {
                 console.log("In player_only mode, keeping last episode PK if previously set.");
             }
-
             const iframe = playerPlaceholder.querySelector('iframe');
             if (iframe) {
                 iframe.onload = () => {
@@ -105,7 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             console.error('Could not generate player URL or player placeholder not found.');
-            // Use translated error message
             setPlaceholderText('error_loading_player');
         }
     }
@@ -115,10 +167,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Translation UI elements not found!");
             return null;
         }
-
         let links = [];
         let isMainLinkContext = (currentLayout === 'player_only');
-
         if (isMainLinkContext) {
             links = Object.values(mainLinksData);
             links.sort((a, b) => a.translation_title.localeCompare(b.translation_title));
@@ -129,47 +179,33 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             console.log(`No links found for context. Layout: ${currentLayout}, Episode PK: ${episodePk}`);
         }
-
         translationButtonsContainer.innerHTML = '';
         translationLabel.style.display = 'none';
         noTranslationsMessage.style.display = 'none';
-
         let translationLinkToAutoLoad = null;
-
         if (links.length > 0) {
             translationLabel.style.display = '';
-
             let preferredLink = null;
             const preferredIdStr = preferredTranslationId?.toString();
             if (preferredIdStr) {
                 preferredLink = links.find(link => link.translation_id?.toString() === preferredIdStr);
                 console.log(`Preferred translation ID ${preferredIdStr} found in links: ${!!preferredLink}`);
             }
-
             translationLinkToAutoLoad = preferredLink || links[0];
             console.log(`Auto-loading translation: ${translationLinkToAutoLoad?.translation_title} (PK: ${translationLinkToAutoLoad?.link_pk})`);
-
             let buttonsHtml = '';
             links.forEach(link => {
                 const quality = link.quality ? ` (${link.quality})` : '';
                 const isSelected = translationLinkToAutoLoad && link.link_pk === translationLinkToAutoLoad.link_pk;
                 const btnClass = isSelected ? 'btn-primary active' : 'btn-outline-primary';
                 const startFromAttr = link.start_from ? `data-start-from="${link.start_from}"` : '';
-                buttonsHtml += `<button class="btn btn-sm ${btnClass} me-1 mb-1 translation-btn"
-                                       data-link-pk="${link.link_pk}"
-                                       data-translation-id="${link.translation_id}"
-                                       ${startFromAttr}>
-                                    ${link.translation_title}${quality}
-                                </button>`;
+                buttonsHtml += `<button class="btn btn-sm ${btnClass} me-1 mb-1 translation-btn" data-link-pk="${link.link_pk}" data-translation-id="${link.translation_id}" ${startFromAttr}>${link.translation_title}${quality}</button>`;
             });
             translationButtonsContainer.innerHTML = buttonsHtml;
-
             return translationLinkToAutoLoad;
-
         } else {
-            noTranslationsMessage.textContent = jsTranslations['no_translations_for_episode'] || "No translations available."; // Set text content
+            noTranslationsMessage.textContent = jsTranslations['no_translations_for_episode'] || "No translations available.";
             noTranslationsMessage.style.display = '';
-            // Use translated placeholder text
             setPlaceholderText('no_content_available');
             return null;
         }
@@ -179,11 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('#seasons-tab-content .episode-selector.active').forEach(el => {
             el.classList.remove('active', 'border', 'border-primary', 'border-3');
         });
-
         if (episodeElement) {
             episodeElement.classList.add('active', 'border', 'border-primary', 'border-3');
             currentEpisodeElement = episodeElement;
-
             if (episodeListColumn?.classList.contains(SCROLL_CLASS)) {
                 episodeElement.scrollIntoView({behavior: 'smooth', block: 'nearest'});
             }
@@ -192,7 +226,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         updateNavButtons();
     }
-
 
     function highlightTranslationButton(buttonElement) {
         translationButtonsContainer?.querySelectorAll('.translation-btn.active').forEach(btn => {
@@ -289,7 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return prevElement;
     }
 
-
     function updateNavButtons() {
         const nextElement = findNextEpisodeElement(currentEpisodeElement);
         const prevElement = findPrevEpisodeElement(currentEpisodeElement);
@@ -300,7 +332,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (nextEpisodeBtn) nextEpisodeBtn.disabled = !nextElement || currentLayout === 'player_only';
         if (prevEpisodeBtn) prevEpisodeBtn.disabled = !prevElement || currentLayout === 'player_only';
     }
-
 
     function handleEpisodeSelection(episodeElement, manuallyClicked = false) {
         if (!episodeElement || currentLayout === 'player_only') {
@@ -313,7 +344,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const preferredTranslationId = LAST_TRANSLATION_KEY ? localStorage.getItem(LAST_TRANSLATION_KEY) : currentSelectedTranslationId;
         console.log(`Preferred Translation ID for episode selection: ${preferredTranslationId}`);
         const translationLinkToLoad = displayTranslationOptions(episodePk, preferredTranslationId);
-
         if (translationLinkToLoad) {
             const startFrom = getStartFromValue(translationLinkToLoad);
             loadPlayer(translationLinkToLoad.link_pk, translationLinkToLoad.translation_id.toString(), startFrom);
@@ -321,12 +351,10 @@ document.addEventListener('DOMContentLoaded', () => {
             highlightTranslationButton(translationButton);
         } else {
             console.log(`No translation link to load for episode PK ${episodePk}`);
-            // Use translated placeholder text
             setPlaceholderText('no_translations_for_episode');
             currentSelectedTranslationId = null;
             highlightTranslationButton(null);
         }
-
         const watchTabButton = document.getElementById('watch-tab');
         if (manuallyClicked && watchTabButton && !watchTabButton.classList.contains('active')) {
             try {
@@ -336,7 +364,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-
 
     function restoreLastWatchedState() {
         if (currentLayout === 'player_only') {
@@ -349,21 +376,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const mainTranslationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${mainTranslationLink.link_pk}']`);
                 highlightTranslationButton(mainTranslationButton);
             } else {
-                // Use translated placeholder text
                 setPlaceholderText('select_translation');
                 highlightTranslationButton(null);
             }
             return;
         }
-
         console.log("Restore Watched State: Checking for last episode...");
         if (!LAST_EPISODE_KEY) {
             console.log("Restore Watched State: No episode key defined.");
-            // Use translated placeholder text
             setPlaceholderText('select_episode_or_translation');
             return;
         }
-
         const lastEpisodePk = localStorage.getItem(LAST_EPISODE_KEY);
         if (lastEpisodePk) {
             const lastEpisodeElement = findEpisodeElementByPk(lastEpisodePk);
@@ -371,7 +394,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`Restore Watched State: Restoring last watched episode: PK ${lastEpisodePk}`);
                 const targetTabPaneId = lastEpisodeElement.closest('.tab-pane')?.id;
                 const targetSeasonButton = targetTabPaneId ? document.querySelector(`button[data-bs-target='#${targetTabPaneId}']`) : null;
-
                 if (targetSeasonButton && !targetSeasonButton.classList.contains('active')) {
                     console.log(`Restore Watched State: Activating season tab for episode ${lastEpisodePk}`);
                     try {
@@ -390,20 +412,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 console.log(`Restore Watched State: Could not find last watched episode element (PK ${lastEpisodePk}) in DOM.`);
-                // Use translated placeholder text
                 setPlaceholderText('select_episode');
                 displayTranslationOptions(null, null);
                 highlightEpisode(null);
             }
         } else {
             console.log("Restore Watched State: No last watched episode found in localStorage.");
-            // Use translated placeholder text
             setPlaceholderText('select_episode');
             displayTranslationOptions(null, null);
             highlightEpisode(null);
         }
     }
-
 
     function restoreLastDetailTab() {
         if (!LAST_DETAIL_TAB_KEY) return;
@@ -411,7 +430,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const defaultTabSelector = '#details-pane';
         const targetSelector = lastTabTarget || defaultTabSelector;
         const tabButton = document.querySelector(`#detail-tabs button[data-bs-target="${targetSelector}"]`);
-
         if (tabButton && !tabButton.classList.contains('active')) {
             try {
                 console.log(`Restoring detail tab: ${targetSelector}`);
@@ -431,7 +449,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
     function applyLayoutPreference(layout, triggeredByInitialization = false) {
         console.log(`ApplyLayoutPreference called with layout: '${layout}', Initializing: ${triggeredByInitialization}`);
         if (!playerContainerColumn || !episodeListColumn || !watchAreaRow) {
@@ -446,14 +463,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const previousLayout = currentLayout;
         currentLayout = chosenLayout;
-
         let playerColClasses = ['col-12'];
         let episodeColClasses = ['col-12'];
         let episodeHidden = false;
         let addScrollClass = false;
         let addListViewClass = false;
         let episodeMargin = 'mt-3';
-
         switch (chosenLayout) {
             case 'episodes_right':
                 playerColClasses = ['col-lg-9', 'col-md-12'];
@@ -472,12 +487,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
         }
         console.log(`Applying classes - Player: ${playerColClasses.join(' ')}, Episodes: ${episodeColClasses.join(' ')}, Hidden: ${episodeHidden}, Scroll: ${addScrollClass}, ListView: ${addListViewClass}, MarginTop: '${episodeMargin}'`);
-
         playerContainerColumn.className = '';
         episodeListColumn.className = '';
         playerContainerColumn.classList.add('col-12', ...playerColClasses);
         episodeListColumn.classList.add('col-12', ...episodeColClasses);
-
         if (episodeHidden) {
             episodeListColumn.classList.add('d-none');
         } else {
@@ -496,14 +509,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             episodeListColumn.classList.remove(LIST_VIEW_CLASS);
         }
-
         localStorage.setItem(PLAYER_LAYOUT_KEY, chosenLayout);
         console.log(`Saved preference to localStorage: ${chosenLayout}`);
         layoutRadios.forEach(radio => {
             radio.checked = (radio.value === chosenLayout);
         });
         updateNavButtons();
-
         if (previousLayout !== chosenLayout) {
             console.log(`Layout changed from '${previousLayout}' to '${chosenLayout}'`);
             if (chosenLayout === 'player_only') {
@@ -517,7 +528,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const mainTranslationButton = translationButtonsContainer?.querySelector(`.translation-btn[data-link-pk='${mainTranslationLink.link_pk}']`);
                     highlightTranslationButton(mainTranslationButton);
                 } else {
-                    // Use translated placeholder text
                     setPlaceholderText('select_translation');
                     highlightTranslationButton(null);
                 }
@@ -528,7 +538,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (lastEpisodeElement) {
                     handleEpisodeSelection(lastEpisodeElement, false);
                 } else {
-                    // Use translated placeholder text
                     setPlaceholderText('select_episode');
                     displayTranslationOptions(null, null);
                     highlightEpisode(null);
@@ -546,7 +555,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
     function initializeLayout() {
         console.log("Initializing layout...");
         const storedLayout = localStorage.getItem(PLAYER_LAYOUT_KEY);
@@ -560,7 +568,6 @@ document.addEventListener('DOMContentLoaded', () => {
         applyLayoutPreference(layoutToApply, true);
     }
 
-
     function checkPlayerOnlyAvailability() {
         const hasMainLinks = Object.keys(mainLinksData).length > 0;
         if (playerOnlyRadio && playerOnlyLabel) {
@@ -568,14 +575,98 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log("Disabling player_only layout option: No main links found.");
                 playerOnlyRadio.disabled = true;
                 playerOnlyLabel.classList.add('disabled', 'opacity-50');
-                // Use translated text
                 playerOnlyLabel.setAttribute('title', jsTranslations['player_only_unavailable'] || 'Player only unavailable');
             } else {
                 playerOnlyRadio.disabled = false;
                 playerOnlyLabel.classList.remove('disabled', 'opacity-50');
-                // Use translated text
                 playerOnlyLabel.setAttribute('title', jsTranslations['player_only_enabled'] || 'Player only');
             }
+        }
+    }
+
+    // --- Favorite Toggle Function ---
+    function handleFavoriteToggle(event) {
+        const button = event.currentTarget;
+        const itemPk = button.dataset.itemPk;
+        const url = button.dataset.url;
+        const currentCsrf = getCsrfToken();
+
+        if (!isUserAuthenticated || !url || !itemPk || !currentCsrf) {
+            console.error("Cannot toggle favorite:", {isUserAuthenticated, url, itemPk, currentCsrf});
+            // Optionally redirect to login or show message
+            return;
+        }
+
+        // Disable button and show loading state
+        button.disabled = true;
+        const buttonTextSpan = button.querySelector('.button-text');
+        const originalText = buttonTextSpan ? buttonTextSpan.textContent : '';
+        if (buttonTextSpan) buttonTextSpan.textContent = jsTranslations['toggling_favorite'] || '...';
+
+        const formData = new FormData();
+        formData.append('media_item_pk', itemPk);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': currentCsrf,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) {
+                    // Handle non-JSON errors (e.g., 500)
+                    console.error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                    return response.text().then(text => {
+                        throw new Error(text || response.statusText);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log(`Favorite status updated: ${data.action}, is_favorite=${data.is_favorite}`);
+                    updateFavoriteButtonUI(button, data.is_favorite);
+                } else {
+                    console.error("Error toggling favorite:", data.message || 'Unknown error');
+                    alert(jsTranslations['toggle_favorite_error'] || 'Error updating favorites.');
+                    // Restore original text if error
+                    if (buttonTextSpan) buttonTextSpan.textContent = originalText;
+                }
+            })
+            .catch(error => {
+                console.error("Fetch error toggling favorite:", error);
+                alert(jsTranslations['toggle_favorite_error'] || 'Error updating favorites.');
+                // Restore original text if error
+                if (buttonTextSpan) buttonTextSpan.textContent = originalText;
+            })
+            .finally(() => {
+                // Re-enable button regardless of outcome
+                button.disabled = false;
+            });
+    }
+
+    // --- Update Favorite Button UI ---
+    function updateFavoriteButtonUI(button, isFavorite) {
+        const filledIcon = button.querySelector('.icon-filled');
+        const outlineIcon = button.querySelector('.icon-outline');
+        const buttonTextSpan = button.querySelector('.button-text');
+
+        if (isFavorite) {
+            button.classList.remove('btn-outline-danger');
+            button.classList.add('btn-danger');
+            button.title = jsTranslations['remove_from_favorites'] || 'Remove from Favorites';
+            if (filledIcon) filledIcon.classList.remove('d-none');
+            if (outlineIcon) outlineIcon.classList.add('d-none');
+            if (buttonTextSpan) buttonTextSpan.textContent = jsTranslations['remove_from_favorites'] || 'Favorite'; // Or just 'Favorite'
+        } else {
+            button.classList.remove('btn-danger');
+            button.classList.add('btn-outline-danger');
+            button.title = jsTranslations['add_to_favorites'] || 'Add to Favorites';
+            if (filledIcon) filledIcon.classList.add('d-none');
+            if (outlineIcon) outlineIcon.classList.remove('d-none');
+            if (buttonTextSpan) buttonTextSpan.textContent = jsTranslations['add_to_favorites'] || 'Favorite'; // Or just 'Favorite'
         }
     }
 
@@ -590,7 +681,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     if (translationButtonsContainer) {
         translationButtonsContainer.addEventListener('click', (event) => {
             const translationButton = event.target.closest('.translation-btn');
@@ -608,7 +698,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     if (nextEpisodeBtn) {
         nextEpisodeBtn.addEventListener('click', () => {
             if (currentLayout !== 'player_only') {
@@ -619,7 +708,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     if (prevEpisodeBtn) {
         prevEpisodeBtn.addEventListener('click', () => {
             if (currentLayout !== 'player_only') {
@@ -630,7 +718,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     const detailTabs = document.querySelectorAll('#detail-tabs button[data-bs-toggle="tab"]');
     detailTabs.forEach(tabButton => {
         tabButton.addEventListener('shown.bs.tab', event => {
@@ -643,7 +730,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-
     layoutRadios.forEach(radio => {
         radio.addEventListener('change', (event) => {
             console.log(`Layout radio changed: ID='${event.target.id}', Value='${event.target.value}', Checked=${event.target.checked}`);
@@ -653,11 +739,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Add listener for the favorite button
+    if (favoriteToggleButton) {
+        toggleFavoriteUrl = favoriteToggleButton.dataset.url; // Store URL
+        favoriteToggleButton.addEventListener('click', handleFavoriteToggle);
+    }
+
     // --- Initializations ---
     console.log("Media detail handler initializing...");
     episodesLinksData = parseJsonData(episodesLinksDataElement, 'Episodes links');
     mainLinksData = parseJsonData(mainLinksDataElement, 'Main links');
-    jsTranslations = parseJsonData(jsTranslationsElement, 'JS Translations'); // Parse translations
+    jsTranslations = parseJsonData(jsTranslationsElement, 'JS Translations');
+    trackHistoryUrl = trackHistoryUrlElement?.dataset.url;
+    isUserAuthenticated = userAuthStatusElement?.dataset.isAuthenticated === 'true';
+    csrfToken = csrfTokenInput?.value; // Get CSRF token once
+
     checkPlayerOnlyAvailability();
     initializeLayout();
     restoreLastDetailTab();
@@ -665,6 +761,12 @@ document.addEventListener('DOMContentLoaded', () => {
         restoreLastWatchedState();
     }, 50);
     updateNavButtons();
-    console.log("Media detail handler initialization complete.");
+    // Initial UI update for favorite button based on template context
+    if (favoriteToggleButton && isUserAuthenticated) {
+        // The initial state is set by the template using the `is_favorite` context variable
+        // We don't need to call updateFavoriteButtonUI here unless we didn't pass the state
+        console.log("Favorite button found. Initial state set by template.");
+    }
+    console.log("Media detail handler initialization complete. Auth Status:", isUserAuthenticated, "Track URL:", trackHistoryUrl, "Fav URL:", toggleFavoriteUrl, "CSRF Found:", !!csrfToken);
 
 }); // End DOMContentLoaded
