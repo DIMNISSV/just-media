@@ -1,9 +1,34 @@
 {# templates/base.html #}
 {% extends "bootstrap5/base.html" %}
-{% load cms_tags menu_tags static i18n sekizai_tags %}
+{% load cms_tags menu_tags static i18n sekizai_tags %} {# i18n нужен для get_language... #}
+
 {% block base_css %}
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <style>
+        .navbar .dropdown-menu { min-width: auto; }
+        .navbar .nav-item .nav-link,
+        .navbar .nav-item .dropdown-toggle { white-space: nowrap; }
+        /* Style for the language form button */
+        .navbar .language-form button.dropdown-item {
+            background: none;
+            border: none;
+            padding: var(--bs-dropdown-item-padding-y) var(--bs-dropdown-item-padding-x); /* Match dropdown item padding */
+            width: 100%;
+            text-align: left;
+            color: var(--bs-dropdown-link-color);
+        }
+        .navbar .language-form button.dropdown-item:hover,
+        .navbar .language-form button.dropdown-item:focus {
+            color: var(--bs-dropdown-link-hover-color);
+            background-color: var(--bs-dropdown-link-hover-bg);
+        }
+         .navbar .language-form button.dropdown-item.active {
+            color: var(--bs-dropdown-link-active-color);
+            background-color: var(--bs-dropdown-link-active-bg);
+        }
+
+    </style>
 {% endblock %}
 
 {% block navbar %}
@@ -16,56 +41,95 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                {# --- Main Menu --- #}
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     {% block menubar %}{% show_menu 0 100 100 100 'bootstrap5/menu.html' %}{% endblock %}
                 </ul>
+                {# --- End Main Menu --- #}
 
-                {# --- Search Form in Navbar --- #}
-                <form class="d-flex ms-auto me-3" role="search" action="{% url 'catalog:mediaitem_search' %}"
-                      method="get">
-                    <input class="form-control form-control-sm me-2" type="search" name="q"
-                           value="{{ request.GET.q|default:'' }}" placeholder="{% trans 'Search Catalog...' %}"
-                           aria-label="Search">
+                {# --- Search Form --- #}
+                <form class="d-flex me-3" role="search" action="{% url 'catalog:mediaitem_search' %}" method="get">
+                    <input class="form-control form-control-sm me-2" type="search" name="q" value="{{ request.GET.q|default:'' }}" placeholder="{% trans 'Search Catalog...' %}" aria-label="Search">
                     <button class="btn btn-outline-success btn-sm" type="submit">{% trans 'Search' %}</button>
                 </form>
                 {# --- End Search Form --- #}
 
-                {# --- Theme Switcher & Auth --- #}
-                <div class="d-flex align-items-center">
+                {# --- Right Aligned Items --- #}
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 d-flex align-items-center flex-row">
+
+                    {# --- Language Selector --- #}
+                    {% get_current_language as LANGUAGE_CODE %}
+                    {% get_language_info_list for LANGUAGES as languages %} {# LANGUAGES приходит из настроек i18n #}
+
+                    {% if languages|length > 1 %}
+                        <li class="nav-item dropdown me-2">
+                            <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-translate me-1" viewBox="0 0 16 16"><path d="M4.545 6.714 4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-2.43 1.379 4.194h-2.69l1.311-4.194z"/><path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995c.193.301.402.583.63.846-.748.575-1.673 1.001-2.768 1.292.178.217.451.635.555.867 1.125-.359 2.08-.844 2.886-1.494.777.665 1.739 1.165 2.93 1.472.133-.254.41-.671.61-.893a12 12 0 0 0-2.619-1.305c.244-.25.4-.487.576-.769l-.261-.15a11 11 0 0 1-1.44-1.275l-.247-.141a12 12 0 0 1-1.34-1.467l-.225-.178.004.004.01-.004.013-.007a.002.002 0 0 0-.005-.008l-.008-.008-.008-.007a.002.002 0 0 1-.005-.004l-.01-.01-.01-.008a.004.004 0 0 1-.008-.004l-.01-.017a.007.007 0 0 0-.004-.004l-.01-.017a.007.007 0 0 1-.007-.004l-.013-.024a.05.05 0 0 1-.004-.005l-.01-.023a.1.1 0 0 0-.004-.005c-.01-.018-.02-.04-.028-.061a.3.3 0 0 0-.03-.052.4.4 0 0 1-.032-.048.6.6 0 0 0-.04-.06.8.8 0 0 1-.048-.067.9.9 0 0 0-.049-.07.9.9 0 0 1-.05-.076 1.3 1.3 0 0 0-.05-.074c-.016-.025-.03-.05-.046-.076a1.99 1.99 0 0 0-.05-.075c-.017-.024-.033-.05-.05-.075a2.3 2.3 0 0 1-.052-.075c-.017-.024-.034-.05-.05-.076a.2.2 0 0 0-.052-.075c-.018-.024-.035-.05-.054-.075a3.1 3.1 0 0 1-.055-.075c-.018-.024-.037-.05-.055-.076a3.4 3.4 0 0 0-.055-.075c-.019-.024-.038-.049-.056-.075a4 4 0 0 1-.056-.077c-.02-.024-.04-.05-.06-.076a4.5 4.5 0 0 0-.06-.076c-.02-.025-.04-.05-.06-.077a5 5 0 0 1-.062-.076c-.02-.025-.04-.05-.062-.077a.16.16 0 0 0-.063-.077c-.02-.024-.04-.05-.062-.077a.2.2 0 0 1-.063-.077l-.063-.078a.01.01 0 0 1-.004-.004l-.063-.077a.005.005 0 0 0-.005-.004l-.064-.078a.05.05 0 0 1-.004-.004l-.063-.078a.01.01 0 0 0-.004-.004l-.064-.078a.01.01 0 0 1-.004-.004l-.064-.078a.01.01 0 0 0-.004-.004l-.063-.078-.064-.08-.064-.079a.01.01 0 0 0-.004-.005l-.064-.078a.003.003 0 0 1-.004-.004l-.064-.079a.01.01 0 0 0-.004-.005l-.064-.079-.064-.08-.064-.079a.007.007 0 0 1-.004-.005l-.064-.079a.002.002 0 0 0-.004-.005l-.064-.079-.064-.08-.064-.08a.002.002 0 0 1-.004-.004l-.064-.08-.064-.08a.005.005 0 0 0-.004-.004l-.064-.08-.064-.08-.064-.08a.004.004 0 0 1-.004-.004l-.064-.08-.064-.08a.005.005 0 0 0-.004-.004l-.064-.08-.064-.08-.064-.08l-.064-.08a.007.007 0 0 1-.004-.005l-.064-.08-.064-.08-.064-.08l-.064-.08a.004.004 0 0 0-.005-.004l-.064-.08-.064-.08-.063-.08-.064-.08-.064-.08l-.064-.08a.004.004 0 0 1-.005-.005l-.064-.08-.064-.08-.063-.08-.064-.08-.064-.08a.005.005 0 0 0-.005-.004l-.064-.08-.063-.08-.064-.08-.064-.08-.064-.08a.005.005 0 0 1-.005-.004l-.063-.08-.064-.08-.064-.08h-.001z"/></svg>
+                                {{ LANGUAGE_CODE|language_name_local|capfirst }}
+                            </a>
+                            {# *** Возвращаем стандартную форму Django для смены языка *** #}
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
+                                {% for language in languages %}
+                                    <li>
+                                        {# Форма отправляет POST на /i18n/setlang/ #}
+                                        <form action="{% url 'set_language' %}" method="post" class="language-form">
+                                            {% csrf_token %}
+                                            {# Сохраняем текущий путь для редиректа #}
+                                            <input name="next" type="hidden" value="{{ request.get_full_path|escape }}">
+                                            {# Язык, на который переключаемся #}
+                                            <input name="language" type="hidden" value="{{ language.code }}">
+                                            <button type="submit" class="dropdown-item {% if language.code == LANGUAGE_CODE %}active{% endif %}"
+                                                    aria-current="{% if language.code == LANGUAGE_CODE %}true{% else %}false{% endif %}">
+                                                {{ language.name_local|capfirst }}
+                                            </button>
+                                        </form>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                             {# *** Конец формы set_language *** #}
+                        </li>
+                    {% endif %}
+                    {# --- End Language Selector --- #}
+
                     {# --- Auth Links --- #}
-                    <div class="me-2">
+                    <li class="nav-item">
                         {% if user.is_authenticated %}
-                            <span class="navbar-text small me-2">
+                             <span class="navbar-text small me-2">
                                  {% blocktrans with username=user.get_username %}Hi, {{ username }}!{% endblocktrans %}
                              </span>
-                            <form action="{% url 'logout' %}" method="post" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit"
-                                        class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</button>
-                            </form>
+                             <form action="{% url 'logout' %}" method="post" class="d-inline">
+                                 {% csrf_token %}
+                                 <button type="submit" class="btn btn-outline-danger btn-sm">{% trans 'Logout' %}</button>
+                             </form>
                         {% else %}
-                            <a href="{% url 'accounts:signup' %}"
-                               class="btn btn-outline-secondary btn-sm me-2">{% trans 'Sign Up' %}</a>
+                            <a href="{% url 'accounts:signup' %}" class="btn btn-outline-secondary btn-sm me-2">{% trans 'Sign Up' %}</a>
                             <a href="{% url 'login' %}" class="btn btn-outline-primary btn-sm">{% trans 'Login' %}</a>
                         {% endif %}
-                    </div>
+                    </li>
                     {# --- End Auth Links --- #}
 
-                    <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm" type="button"
-                            aria-label="{% trans 'Toggle theme' %}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                             class="bi bi-circle-half" viewBox="0 0 16 16">
-                            <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/>
-                        </svg>
-                        <span class="d-none d-md-inline ms-1" id="theme-switcher-text"></span>
-                    </button>
-                </div>
-                {# --- End Theme Switcher & Auth --- #}
+                    {# --- Theme Switcher --- #}
+                    <li class="nav-item ms-2">
+                        <button id="theme-switcher-btn" class="btn btn-outline-secondary btn-sm" type="button"
+                                aria-label="{% trans 'Toggle theme' %}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-circle-half" viewBox="0 0 16 16"> <path d="M8 15A7 7 0 1 0 8 1v14zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16z"/> </svg>
+                            <span class="d-none d-md-inline ms-1" id="theme-switcher-text"></span>
+                        </button>
+                    </li>
+                     {# --- End Theme Switcher --- #}
+
+                </ul>
+                 {# --- End Right Aligned Items --- #}
 
             </div>
         </div>
     </nav>
 {% endblock navbar %}
+
+{# --- УДАЛЕНО: addtoblock с toolbar.legacy.min.js --- #}
+{# {% addtoblock "js" %}<script src="{% static 'cms/js/dist/bundle.toolbar.legacy.min.js' %}"></script>{% endaddtoblock %} #}
+
+{% block content %}{% endblock content %}
 
 {% block base_js %}
     {{ block.super }}
