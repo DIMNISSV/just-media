@@ -37,7 +37,7 @@ A Django CMS-based project for browsing and viewing media content, utilizing the
 
 3.  **Install dependencies:**
     ```bash
-    pip install -r requirements.in
+    pip install -r requirements.txt
     ```
 
 4.  **Configure environment variables:**

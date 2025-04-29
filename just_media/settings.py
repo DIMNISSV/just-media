@@ -254,3 +254,55 @@ elif not KODIK_API_TOKEN and not DEBUG:
 
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
+
+LOGGING_DIR = BASE_DIR / 'logs'
+LOGGING_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,  # Не отключать логгеры Django по умолчанию
+    'formatters': {  # Форматы вывода логов
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {  # Куда направлять логи
+        'console': {  # Вывод в консоль (то, что вы видите сейчас для WARNING/ERROR)
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'catalog_file': {  # Запись логов catalog в файл
+            'level': 'DEBUG',  # Уровень логирования для этого файла (можно INFO)
+            'class': 'logging.handlers.RotatingFileHandler',  # Ротация файлов
+            'filename': os.path.join(LOGGING_DIR, 'catalog.log'),
+            'maxBytes': 1024 * 1024 * 5,  # 5 MB
+            'backupCount': 5,  # Хранить 5 старых файлов
+            'formatter': 'verbose',
+        },
+        'django_file': {  # Отдельный файл для логов Django (опционально)
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGGING_DIR, 'django.log'),
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['django_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'catalog': {
+            'handlers': ['catalog_file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    }
+}
