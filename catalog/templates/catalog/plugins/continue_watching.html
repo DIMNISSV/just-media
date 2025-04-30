@@ -29,7 +29,7 @@
                                     <div class="card-body p-2 d-flex flex-column">
                                         <h6 class="card-title mb-1 flex-grow-1" style="font-size: 0.9rem;">
                                             <a href="{% url 'catalog:mediaitem_detail' pk=media_item.pk %}"
-                                               class="text-decoration-none link-dark stretched-link">{{ media_item.title|truncatechars:50 }}</a>
+                                               class="text-decoration-none stretched-link">{{ media_item.title|truncatechars:50 }}</a>
                                         </h6>
                                         {# Display Episode/Translation Info #}
                                         <div class="mt-auto small text-muted">

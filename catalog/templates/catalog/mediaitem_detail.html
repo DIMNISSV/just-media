@@ -23,7 +23,6 @@
                         data-url="{% url 'catalog:toggle_favorite' %}"
                         title="
                                 {% if is_favorite %}{% trans 'Remove from Favorites' %}{% else %}{% trans 'Add to Favorites' %}{% endif %}">
-                    {# Heart Icon (Bootstrap Icons) #}
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
                          class="bi bi-heart-fill icon-filled {% if not is_favorite %}d-none{% endif %}"
                          viewBox="0 0 16 16">
@@ -34,7 +33,6 @@
                          class="bi bi-heart icon-outline {% if is_favorite %}d-none{% endif %}" viewBox="0 0 16 16">
                         <path d="m8 2.748-.717-.737C5.6.281 2.514.878 1.4 3.053c-.523 1.023-.641 2.5.314 4.385.92 1.815 2.834 3.989 6.286 6.357 3.452-2.368 5.365-4.542 6.286-6.357.955-1.886.838-3.362.314-4.385C13.486.878 10.4.28 8.717 2.01zM8 15C-7.333 4.868 3.279-3.04 7.824 1.143q.09.083.176.171a3 3 0 0 1 .176-.17C12.72-3.042 23.333 4.867 8 15"/>
                     </svg>
-                    {# Button text updated by JS #}
                     <span class="button-text ms-1 d-none d-md-inline">{% if is_favorite %}
                         {% trans "Favorite" %}{% else %}{% trans "Favorite" %}{% endif %}</span>
                 </button>
@@ -64,39 +62,29 @@
             <div class="tab-pane fade show active" id="details-pane" role="tabpanel" aria-labelledby="details-tab"
                  tabindex="0">
                 <div class="row">
-                    {# --- Poster Column --- #}
                     <div class="col-md-4 col-lg-3 mb-3 mb-md-0">
-                        {% if media_item.poster_url %}
-                            <img src="{{ media_item.poster_url }}"
-                                 alt="{% blocktrans with title=media_item.title %}Poster for {{ title }}{% endblocktrans %}"
-                                 class="img-fluid rounded shadow-sm">
+                        {% if media_item.poster_url %}<img src="{{ media_item.poster_url }}"
+                                                           alt="{% blocktrans with title=media_item.title %}Poster for {{ title }}{% endblocktrans %}"
+                                                           class="img-fluid rounded shadow-sm">
                         {% else %}
                             <div class="img-fluid rounded shadow-sm bg-secondary text-white d-flex align-items-center justify-content-center"
-                                 style="min-height: 300px;">{% trans "No Poster" %}</div>
-                        {% endif %}
+                                 style="min-height: 300px;">{% trans "No Poster" %}</div>{% endif %}
                     </div>
-                    {# --- Metadata Column --- #}
                     <div class="col-md-8 col-lg-9">
                         <h5>{% trans "Details" %}</h5>
                         <ul class="list-unstyled small mb-3">
                             {% if media_item.release_year %}
-                                <li><strong>{% trans "Year" %}:</strong> {{ media_item.release_year|unlocalize }}</li>
-                            {% endif %}
+                                <li><strong>{% trans "Year" %}:</strong> {{ media_item.release_year|unlocalize }}
+                                </li>{% endif %}
                             <li><strong>{% trans "Type" %}:</strong> {{ media_item.get_media_type_display }}</li>
                             {% if media_item.countries.all %}
                                 <li><strong>{% trans "Countries" %}:</strong>
-                                    {% for country in media_item.countries.all %}
-                                        {{ country.name }}{% if not forloop.last %}, {% endif %}
-                                    {% endfor %}
-                                </li>
-                            {% endif %}
+                                    {% for country in media_item.countries.all %}{{ country.name }}
+                                        {% if not forloop.last %}, {% endif %}{% endfor %}</li>{% endif %}
                             {% if media_item.genres.all %}
                                 <li><strong>{% trans "Genres" %}:</strong>
-                                    {% for genre in media_item.genres.all %}
-                                        {{ genre.name }}{% if not forloop.last %}, {% endif %}
-                                    {% endfor %}
-                                </li>
-                            {% endif %}
+                                    {% for genre in media_item.genres.all %}{{ genre.name }}{% if not forloop.last %},
+                                    {% endif %}{% endfor %}</li>{% endif %}
                             {% if media_item.kinopoisk_id %}
                                 <li><strong>Kinopoisk ID:</strong> {{ media_item.kinopoisk_id }}</li>{% endif %}
                             {% if media_item.imdb_id %}
@@ -110,6 +98,19 @@
                             <h2>{% trans "Description" %}</h2>
                             <p>{{ media_item.description|linebreaksbr }}</p>
                         {% endif %}
+                        {# --- Related Items Section --- #}
+                        {% if related_items %}
+                            <hr class="my-4">
+                            <h2 class="h4">{% trans "Related Items" %}</h2>
+                            <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+                                {% for item in related_items %}
+                                    <div class="col">
+                                        {% include "catalog/includes/media_item_card.html" with item=item %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        {# --- End Related Items Section --- #}
                     </div>
                 </div>
             </div>
@@ -118,147 +119,21 @@
 
             {# --- Watch Tab Pane --- #}
             <div class="tab-pane fade" id="watch-pane" role="tabpanel" aria-labelledby="watch-tab" tabindex="0">
-                {# *** ADDED CSRF token INSIDE the watch-pane for JS fetch *** #}
                 {% csrf_token %}
 
-                {# --- Layout Controls --- #}
-                <div class="d-flex justify-content-end mb-4">
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Player layout selection">
-                        <input type="radio" class="btn-check" name="playerLayout" id="layoutEpisodesBelow"
-                               value="episodes_below" autocomplete="off">
-                        <label class="btn btn-outline-secondary" for="layoutEpisodesBelow"
-                               title="{% trans 'Episodes below player' %}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                                 class="bi bi-distribute-vertical" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd"
-                                      d="M1 1.5a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 0-1h-13a.5.5 0 0 0-.5.5m0 13a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 0-1h-13a.5.5 0 0 0-.5.5"/>
-                                <path d="M2 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/>
-                            </svg>
-                        </label>
+                {# *** Use Includes for Watch Tab Content *** #}
+                {% include "catalog/includes/watch_layout_controls.html" %}
 
-                        <input type="radio" class="btn-check" name="playerLayout" id="layoutEpisodesRight"
-                               value="episodes_right" autocomplete="off">
-                        <label class="btn btn-outline-secondary" for="layoutEpisodesRight"
-                               title="{% trans 'Episodes beside player' %}">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                                 class="bi bi-layout-split" viewBox="0 0 16 16">
-                                <path d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm8.5-1v12H14a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM7.5 2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h1V2z"/>
-                            </svg>
-                        </label>
-
-                        <input type="radio" class="btn-check" name="playerLayout" id="layoutPlayerOnly"
-                               value="player_only" autocomplete="off" {% if not has_main_links %}disabled{% endif %}>
-                        <label class="btn btn-outline-secondary {% if not has_main_links %}disabled opacity-50{% endif %}"
-                               for="layoutPlayerOnly">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                                 class="bi bi-tv" viewBox="0 0 16 16">
-                                <path d="M2.5 13.5A.5.5 0 0 1 3 13h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5M13.991 3l.012.001a1.5 1.5 0 0 1 .538.143.76.76 0 0 1 .302.254c.067.1.145.277.145.602v7a.6.6 0 0 1-.145.602.76.76 0 0 1-.302.254.98.98 0 0 1-.538.143L13 11.999H3c-.264 0-.505-.03-.7-.081a1.5 1.5 0 0 1-.538-.143.76.76 0 0 1-.302-.254C1.39 11.543 1.31 11.366 1.31 11V3.602c0-.325.078-.502.145-.602.072-.105.17-.186.302-.254a1.5 1.5 0 0 1 .538-.143zM14 2H2C.5 2 0 2.5 0 3v8c0 .5.5 1 2 1h12c1.5 0 2-.5 2-1V3c0-.5-.5-1-2-1"/>
-                            </svg>
-                        </label>
-                    </div>
-                </div>
-                {# --- End Layout Controls --- #}
-
-                {# --- Main Watch Area Container - BOOTSTRAP ROW --- #}
                 <div id="watch-area-row" class="row g-lg-3 g-md-2 g-sm-1">
-
-                    {# --- Player Column --- #}
-                    <div id="player-container-column" class="col-12"> {# JS changes classes #}
-                        <div id="player-placeholder" class="mb-3" style="min-height: 100px;">
-                            <div class="text-center text-muted border rounded p-5">{% trans "Select an episode or translation to start watching" %}</div>
-                        </div>
-                        <div id="translation-selector-placeholder" class="mb-3">
-                            <span class="me-2 small translation-label"
-                                  style="display: none;">{% trans "Translation" %}:</span>
-                            <span id="translation-buttons-container"></span>
-                            <span id="no-translations-message" class="text-warning small"
-                                  style="display: none;">{% trans "No translations available." %}</span>
-                        </div>
+                    <div id="player-container-column" class="col-12">
+                        {% include "catalog/includes/watch_player_area.html" %}
                     </div>
-                    {# --- End Player Column --- #}
-
-                    {# --- Episodes Column --- #}
-                    <div id="episodes-container-column" class="col-12"> {# JS changes classes #}
-                        {% if media_item.prefetched_seasons %}
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <button id="prev-episode-btn" class="btn btn-outline-secondary btn-sm" type="button"
-                                        disabled> « {% trans "Previous" %}</button>
-                                <h2 class="fs-5 mb-0 text-center">{% trans "Playlist" %}</h2>
-                                <button id="next-episode-btn" class="btn btn-outline-secondary btn-sm"
-                                        type="button">{% trans "Next Episode" %} »
-                                </button>
-                            </div>
-
-                            <ul class="nav nav-tabs mb-3 nav-tabs-sm" id="seasons-tab" role="tablist">
-                                {% for season in media_item.prefetched_seasons %}
-                                    <li class="nav-item" role="presentation">
-                                        <button class="nav-link {% if forloop.first %}active{% endif %}"
-                                                id="season-tab-{{ season.pk|unlocalize }}" data-bs-toggle="tab"
-                                                data-bs-target="#season-pane-{{ season.pk|unlocalize }}" type="button"
-                                                role="tab" aria-controls="season-pane-{{ season.pk|unlocalize }}"
-                                                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">{{ season }}</button>
-                                    </li>
-                                {% endfor %}
-                            </ul>
-
-                            <div class="tab-content" id="seasons-tab-content"
-                                 data-media-pk="{{ media_item.pk|unlocalize }}">
-                                {% for season in media_item.prefetched_seasons %}
-                                    <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
-                                         id="season-pane-{{ season.pk|unlocalize }}" role="tabpanel"
-                                         aria-labelledby="season-tab-{{ season.pk|unlocalize }}" tabindex="0">
-                                        {% if season.prefetched_episodes %}
-                                            <div class="episodes-grid row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-2">
-                                                {% for episode in season.prefetched_episodes %}
-                                                    <div class="col">
-                                                        <a href="#" class="episode-selector card text-decoration-none"
-                                                           data-episode-pk="{{ episode.pk|unlocalize }}"
-                                                           data-episode-num="{{ episode.episode_number|unlocalize }}"
-                                                           data-season-num="{{ season.season_number|unlocalize }}"
-                                                           title="
-                                                                   
-                                                                   
-                                                               
-                                                                   {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}">
-                                                            {% with first_screenshot=episode.screenshots.first %}
-                                                                {% if first_screenshot %}
-                                                                    <img src="{{ first_screenshot.url }}"
-                                                                         class="card-img-top" loading="lazy"
-                                                                         alt="{% blocktrans %}Screenshot for Episode {{ episode.episode_number }}{% endblocktrans %}">
-                                                                {% else %}
-                                                                    <div class="card-img-top bg-light d-flex align-items-center justify-content-center text-muted small"
-                                                                         style="min-height: 50px; aspect-ratio: 16/9;">{% trans "No Preview" %}</div>
-                                                                {% endif %}
-                                                            {% endwith %}
-                                                            <div class="card-body">
-                                                                <span class="card-text">
-                                                                    {% blocktrans with num=episode.episode_number %}Ep.
-                                                                        {{ num }}{% endblocktrans %}
-                                                                    {% if episode.title %} -
-                                                                        {{ episode.title|truncatechars:45 }}{% endif %}
-                                                                </span>
-                                                            </div>
-                                                        </a>
-                                                    </div>
-                                                {% endfor %}
-                                            </div>
-                                        {% else %}
-                                            <p class="text-muted">{% trans "No episodes found for this season." %}</p>
-                                        {% endif %}
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            {% if media_item.media_type == 'tv_show' or media_item.media_type == 'anime_series' or media_item.media_type == 'cartoon_series' or media_item.media_type == 'documentary_series' %}
-                                <p class="text-muted">{% trans "Episode list is not available yet." %}</p>
-                            {% else %}
-                                <p class="text-muted">{% trans "This is a single feature." %}</p>
-                            {% endif %}
-                        {% endif %}
+                    <div id="episodes-container-column" class="col-12">
+                        {% include "catalog/includes/watch_episodes_area.html" %}
                     </div>
-                    {# --- End Episodes Column --- #}
                 </div>
-                {# End watch-area-row #}
+                {# *** End Includes *** #}
+
             </div>
             {# End watch-pane #}
         </div>
@@ -269,7 +144,6 @@
     <template id="player-url-template" data-url="{% url 'catalog:play_source_link' pk=0 %}"></template>
     <template id="track-watch-history-url" data-url="{% url 'catalog:track_watch_history' %}"></template>
     <template id="user-auth-status" data-is-authenticated="{{ user.is_authenticated|yesno:'true,false' }}"></template>
-
     <script id="episodes-links-data" type="application/json">{{ episodes_links_json|safe }}</script>
     <script id="main-links-data" type="application/json">{{ main_links_json|safe }}</script>
     <script id="js-translations-data" type="application/json">{{ js_translations|safe }}</script>
