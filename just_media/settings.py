@@ -36,6 +36,8 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 't'}
 
 ALLOWED_HOSTS = [str(i).strip() for i in os.environ.get('ALLOWED_HOSTS', ['localhost', '127.0.0.1']).split(',')]
 
+CSRF_TRUSTED_ORIGINS = [str(i).strip() for i in os.environ.get('CSRF_TRUSTED_ORIGINS', ['localhost', '127.0.0.1']).split(',')]
+
 # Application definition
 
 INSTALLED_APPS = [
