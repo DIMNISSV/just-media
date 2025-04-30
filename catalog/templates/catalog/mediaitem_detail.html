@@ -22,6 +22,40 @@
                         data-item-pk="{{ media_item.pk|unlocalize }}"
                         data-url="{% url 'catalog:toggle_favorite' %}"
                         title="
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                                 {% if is_favorite %}{% trans 'Remove from Favorites' %}{% else %}{% trans 'Add to Favorites' %}{% endif %}">
                     {# Heart Icon (Bootstrap Icons) #}
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
@@ -216,10 +250,8 @@
                                                            data-episode-num="{{ episode.episode_number|unlocalize }}"
                                                            data-season-num="{{ season.season_number|unlocalize }}"
                                                            title="
-                                                                   
-                                                                   
-                                                               
-                                                                   {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}">
+{% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}
+">
                                                             {% with first_screenshot=episode.screenshots.first %}
                                                                 {% if first_screenshot %}
                                                                     <img src="{{ first_screenshot.url }}"
