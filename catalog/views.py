@@ -242,7 +242,6 @@ class MediaItemSearchView(ListView):
         return context
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class TrackWatchView(LoginRequiredMixin, View):
     """
     Handles POST requests from the frontend to record viewing history.
