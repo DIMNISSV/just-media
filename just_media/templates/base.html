@@ -126,11 +126,6 @@
     </nav>
 {% endblock navbar %}
 
-{# --- УДАЛЕНО: addtoblock с toolbar.legacy.min.js --- #}
-{# {% addtoblock "js" %}<script src="{% static 'cms/js/dist/bundle.toolbar.legacy.min.js' %}"></script>{% endaddtoblock %} #}
-
-{% block content %}{% endblock content %}
-
 {% block base_js %}
     {{ block.super }}
     <script src="{% static 'js/theme_switcher.js' %}" defer></script>
