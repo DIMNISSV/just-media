@@ -1,0 +1,76 @@
+{# catalog/templates/catalog/includes/watch_episodes_area.html #}
+{% load i18n l10n %}
+{% if media_item.prefetched_seasons %}
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <button id="prev-episode-btn" class="btn btn-outline-secondary btn-sm" type="button" disabled>
+            « {% trans "Previous" %}</button>
+        <h2 class="fs-5 mb-0 text-center">{% trans "Playlist" %}</h2>
+        <button id="next-episode-btn" class="btn btn-outline-secondary btn-sm" type="button">{% trans "Next Episode" %}
+            »
+        </button>
+    </div>
+
+    {# Season Tabs #}
+    <ul class="nav nav-tabs mb-3 nav-tabs-sm" id="seasons-tab" role="tablist">
+        {% for season in media_item.prefetched_seasons %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if forloop.first %}active{% endif %}"
+                        id="season-tab-{{ season.pk|unlocalize }}" data-bs-toggle="tab"
+                        data-bs-target="#season-pane-{{ season.pk|unlocalize }}" type="button"
+                        role="tab" aria-controls="season-pane-{{ season.pk|unlocalize }}"
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">{{ season }}</button>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {# Season Tab Content #}
+    <div class="tab-content" id="seasons-tab-content" data-media-pk="{{ media_item.pk|unlocalize }}">
+        {% for season in media_item.prefetched_seasons %}
+            <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+                 id="season-pane-{{ season.pk|unlocalize }}" role="tabpanel"
+                 aria-labelledby="season-tab-{{ season.pk|unlocalize }}" tabindex="0">
+                {% if season.prefetched_episodes %}
+                    <div class="episodes-grid row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-2">
+                        {% for episode in season.prefetched_episodes %}
+                            <div class="col">
+                                <a href="#" class="episode-selector card text-decoration-none"
+                                   data-episode-pk="{{ episode.pk|unlocalize }}"
+                                   data-episode-num="{{ episode.episode_number|unlocalize }}"
+                                   data-season-num="{{ season.season_number|unlocalize }}"
+                                   title="
+                                           {% blocktrans with num=episode.episode_number %}{{ episode.title|default:"Episode" }} {{ num }}{% endblocktrans %}">
+                                    {% with first_screenshot=episode.screenshots.first %}
+                                        {% if first_screenshot %}
+                                            <img src="{{ first_screenshot.url }}" class="card-img-top" loading="lazy"
+                                                 alt="{% blocktrans %}Screenshot for Episode {{ episode.episode_number }}{% endblocktrans %}">
+                                        {% else %}
+                                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center text-muted small"
+                                                 style="min-height: 50px; aspect-ratio: 16/9;">{% trans "No Preview" %}</div>
+                                        {% endif %}
+                                    {% endwith %}
+                                    <div class="card-body">
+                                        <span class="card-text">
+                                            {% blocktrans with num=episode.episode_number %}Ep.
+                                                {{ num }}{% endblocktrans %}
+                                            {% if episode.title %} - {{ episode.title|truncatechars:45 }}{% endif %}
+                                        </span>
+                                    </div>
+                                </a>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">{% trans "No episodes found for this season." %}</p>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    {# Display message if item type is series but no seasons/episodes loaded #}
+    {% if media_item.media_type == 'tv_show' or media_item.media_type == 'anime_series' or media_item.media_type == 'cartoon_series' or media_item.media_type == 'documentary_series' %}
+        <p class="text-muted">{% trans "Episode list is not available yet." %}</p>
+    {% else %}
+        {# Display different message for non-series types #}
+        <p class="text-muted">{% trans "This is a single feature." %}</p>
+    {% endif %}
+{% endif %}

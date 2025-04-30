@@ -1,0 +1,15 @@
+{# catalog/templates/catalog/includes/watch_player_area.html #}
+{% load i18n %}
+<div id="player-placeholder" class="mb-3" style="min-height: 100px;">
+    {# Initial placeholder text, JS will update it #}
+    <div class="text-center text-muted border rounded p-5">{% trans "Select an episode or translation to start watching" %}</div>
+</div>
+<div id="translation-selector-placeholder" class="mb-3">
+    {# Static label, shown/hidden by JS #}
+    <span class="me-2 small translation-label" style="display: none;">{% trans "Translation" %}:</span>
+    {# Buttons added here by JS #}
+    <span id="translation-buttons-container"></span>
+    {# Message shown/hidden by JS #}
+    <span id="no-translations-message" class="text-warning small"
+          style="display: none;">{% trans "No translations available." %}</span>
+</div>
